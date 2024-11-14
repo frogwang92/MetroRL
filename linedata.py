@@ -49,13 +49,13 @@ line_segments = [
     LineSegment(s14, s15),
     LineSegment(s15, s16),
     LineSegment(s16, d2),
-    LineSegment(s14, s21),
-    LineSegment(s21, s22),
-    LineSegment(s22, s23),
-    LineSegment(s23, s24),
-    LineSegment(s24, s25),
-    LineSegment(s25, s26),
-    LineSegment(s26, s15)
+    LineSegment(d2, s26),
+    LineSegment(s26, s25),
+    LineSegment(s25, s24),
+    LineSegment(s24, s23),
+    LineSegment(s23, s22),
+    LineSegment(s22, s21),
+    LineSegment(s21, d1)
 ]
 
 platforms = [d1, s11, s12, s13, s14, s15, s16, d2, s21, s22, s23, s24, s25, s26]

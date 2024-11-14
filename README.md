@@ -14,7 +14,7 @@ MetroRL is a Python-based application for visualizing and simulating metro syste
 
 1. Clone the repository:
     ```sh
-    git clone https://github.com/yourusername/MetroRL.git
+    git clone https://github.com/frogwang92/MetroRL.git
     ```
 2. Navigate to the project directory:
     ```sh
