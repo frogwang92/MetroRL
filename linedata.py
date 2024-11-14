@@ -60,9 +60,10 @@ line_segments = [
 
 platforms = [d1, s11, s12, s13, s14, s15, s16, d2, s21, s22, s23, s24, s25, s26]
 
-# Print the created platforms and line segments
-for platform in [d1, s11, s12, s13, s14, s15, s16, d2, s21, s22, s23, s24, s25, s26]:
-    print(platform)
+if __name__ == "__main__":
+    # Print the created platforms and line segments
+    for platform in platforms:
+        print(platform)
 
-for segment in line_segments:
-    print(segment)
+    for segment in line_segments:
+        print(segment)

@@ -1,5 +1,5 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsLineItem, QGraphicsEllipseItem, QToolTip, QStatusBar, QToolBar, QListWidget, QVBoxLayout, QHBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsLineItem, QGraphicsEllipseItem, QToolTip, QStatusBar, QToolBar, QListWidget, QVBoxLayout, QHBoxLayout, QWidget, QSplitter, QLabel
 from PyQt6.QtCore import Qt, QPointF, QTimer
 from PyQt6.QtGui import QPen, QColor, QIcon, QAction, QBrush, QPainter
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
@@ -8,34 +8,44 @@ from tr.linesegment import LineSegment
 from buildtopology import build_topology, calc_coordinates_with_networkx
 from linedata import platforms, line_segments
 
-class HoverableGraphicsLineItem(QGraphicsLineItem):
-    def __init__(self, edge, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.edge = edge
+class HoverableItem:
+    """Mixin class for hoverable graphics items"""
+    def __init__(self, tooltip_prefix=""):
+        self.tooltip_prefix = tooltip_prefix
         self.setAcceptHoverEvents(True)
+
+    def _show_tooltip(self, event, item):
+        """Show tooltip for the item"""
+        QToolTip.showText(
+            event.screenPos(), 
+            f"{self.tooltip_prefix} Id: {item.id} Weight: {item.weight}"
+        )
+
+    def _hide_tooltip(self):
+        """Hide the tooltip"""
+        QToolTip.hideText()
+
+class HoverableGraphicsLineItem(QGraphicsLineItem, HoverableItem):
+    def __init__(self, edge, *args, **kwargs):
+        QGraphicsLineItem.__init__(self, *args, **kwargs)
+        HoverableItem.__init__(self, "Edge")
+        self.edge = edge
+        
     def hoverEnterEvent(self, event):
         self.setPen(QPen(QColor('blue'), 2))
-        QToolTip.showText(event.screenPos(), f"Id: {self.edge.id} Weight: {self.edge.weight}")
+        self._show_tooltip(event, self.edge)
         super().hoverEnterEvent(event)
+        
     def hoverLeaveEvent(self, event):
         self.setPen(QPen(QColor('grey'), 2))
-        QToolTip.hideText()
+        self._hide_tooltip()
         super().hoverLeaveEvent(event)
 
-class HoverableGraphicsEllipseItem(QGraphicsEllipseItem):
+class HoverableGraphicsEllipseItem(QGraphicsEllipseItem, HoverableItem):
     def __init__(self, node, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        QGraphicsEllipseItem.__init__(self, *args, **kwargs)
+        HoverableItem.__init__(self, "Node")
         self.node = node
-        self.setAcceptHoverEvents(True)
-
-    def hoverEnterEvent(self, event):
-        self.setBrush(QColor('green'))
-        QToolTip.showText(event.screenPos(), f"Id: {self.node.id} Weight: {self.node.weight}")
-        super().hoverEnterEvent(event)
-    def hoverLeaveEvent(self, event):
-        self.setBrush(QColor('lightblue'))
-        QToolTip.hideText()
-        super().hoverLeaveEvent(event)
 
 class CustomGraphicsView(QGraphicsView):
     def __init__(self, scene, parent=None):
@@ -70,134 +80,244 @@ class CustomGraphicsView(QGraphicsView):
         self.translate(delta.x(), delta.y())
 
 class MetroWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, env):
         super().__init__()
+        self.env = env
+        self._init_window()
+        self._init_layouts()
+        self._init_toolbar()
+        self._init_statusbar()
+        self._init_graph()
+        self._init_timeline()
+        
+    def _init_window(self):
+        """Initialize window properties"""
         self.setWindowTitle("Metro Topology")
         self.setGeometry(100, 100, 1500, 800)
-        
-        # 设置窗口图标
         self.setWindowIcon(QIcon('logo.ico'))
 
+    def _init_layouts(self):
+        """Initialize layout structure"""
+        # Create main components
         self.scene = QGraphicsScene()
         self.view = CustomGraphicsView(self.scene, self)
+        self.nodeList = self._create_node_list()
+        self.edgeList = self._create_edge_list()
         
-        # 创建右侧的节点列表
-        self.nodeList = QListWidget()
-        self.nodeList.itemClicked.connect(self.onNodeClicked)
-
-        # 创建右侧的边列表
-        self.edgeList = QListWidget()
-        self.edgeList.itemClicked.connect(self.onEdgeClicked)
-
-        # 设置节点列表和边列表的宽度为窗口宽度的10%
-        self.nodeList.setFixedWidth(int(self.width() * 0.1))
-        self.edgeList.setFixedWidth(int(self.width() * 0.1))
-
-        # 创建一个布局，将视图和列表添加到布局中
+        # Create timeline components
+        self.timeline_scene = QGraphicsScene()
+        self.timeline_view = CustomGraphicsView(self.timeline_scene, self)
+        
+        # Setup layouts
+        graph_layout = QVBoxLayout()
+        graph_layout.addWidget(self.view, stretch=1)
+        graph_layout.addWidget(self.timeline_view, stretch=1)
+        
+        graph_widget = QWidget()
+        graph_widget.setLayout(graph_layout)
+        
         layout = QHBoxLayout()
-        layout.addWidget(self.view)
+        layout.addWidget(graph_widget)
         layout.addWidget(self.nodeList)
         layout.addWidget(self.edgeList)
-        layout.setContentsMargins(5, 5, 5, 5)
-
-        # 创建一个中央小部件，并将布局设置为中央小部件的布局
+        layout.setContentsMargins(1, 1, 1, 1)
+        
         centralWidget = QWidget()
         centralWidget.setLayout(layout)
         self.setCentralWidget(centralWidget)
 
-        # 2px边距
-        self.view.setStyleSheet("border: 1px solid grey; margin: 2px;")
-
-        # 添加状态栏
-        self.statusBar = QStatusBar()
-        self.setStatusBar(self.statusBar)
-
-        # 添加工具栏
+    def _init_toolbar(self):
+        """Initialize toolbar and actions"""
         self.toolbar = QToolBar("Main Toolbar")
         self.addToolBar(self.toolbar)
+        
+        # Create actions
+        actions = {
+            'Start': self._on_start,
+            'Pause': self._on_pause,
+            'Stop': self._on_stop,
+            'Zoom In': self.zoomIn,
+            'Zoom Out': self.zoomOut
+        }
+        
+        for name, handler in actions.items():
+            action = QAction(name, self)
+            action.triggered.connect(handler)
+            self.toolbar.addAction(action)
+            
+        # Store actions for later access
+        self.actions = {name: action for name, action in zip(actions.keys(), self.toolbar.actions())}
+        
+        # Set toolbar style
+        # self.toolbar.setStyleSheet("QToolButton { font-family: 'Times New Roman'; }")
 
-        # 添加开始按钮
-        self.startAction = QAction('Start', self)
-        self.toolbar.addAction(self.startAction)
+    def _on_start(self):
+        """Handle start button click"""
+        self.env.start()
+        
+    def _on_pause(self):
+        """Handle pause button click"""
+        self.env.pause()
+        
+    def _on_stop(self):
+        """Handle stop button click"""
+        self.env.stop()
 
-        # 添加暂停按钮
-        self.pauseAction = QAction('Pause', self)
-        self.toolbar.addAction(self.pauseAction)
+    def _init_statusbar(self):
+        """Initialize status bar and labels"""
+        self.statusBar = QStatusBar()
+        self.setStatusBar(self.statusBar)
+        
+        # Create status labels
+        self.status_labels = {
+            'time': QLabel("Time: 0"),
+            'status': QLabel("Status: Stopped"),
+            'mode': QLabel(f"Mode: {self.env.mode.value}")
+        }
+        
+        # Add labels to status bar
+        for label in self.status_labels.values():
+            self.statusBar.addPermanentWidget(label)
+            
+        # Setup update timer
+        self.statusTimer = QTimer()
+        self.statusTimer.timeout.connect(self._update_status)
+        self.statusTimer.start(1000)  # Update every second
 
-        # 添加停止按钮
-        self.stopAction = QAction('Stop', self)
-        self.toolbar.addAction(self.stopAction)
-
-        # 添加缩放按钮
-        self.zoomInAction = QAction('Zoom In', self)
-        self.zoomInAction.triggered.connect(self.zoomIn)
-        self.toolbar.addAction(self.zoomInAction)
-
-        self.zoomOutAction = QAction('Zoom Out', self)
-        self.zoomOutAction.triggered.connect(self.zoomOut)
-        self.toolbar.addAction(self.zoomOutAction)
-
-        # 设置工具栏的样式表
-        self.toolbar.setStyleSheet("QToolButton { font-family: 'Times New Roman'; }")
-
-        self.initUI()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        # 动态调整节点列表和边列表的宽度为窗口宽度的10%
-        self.nodeList.setFixedWidth(int(self.width() * 0.1))
-        self.edgeList.setFixedWidth(int(self.width() * 0.1))
-
-    def initUI(self):
-        nodes, edges = build_topology(platforms, line_segments)
-        nodes = calc_coordinates_with_networkx(nodes, edges)
-
-        # Draw the nodes and edges
-        pen = QPen(QColor('grey'))
-        pen.setWidth(2)  # Double the line width
-
+    def _init_graph(self):
+        """Initialize graph visualization"""
+        nodes, edges = self.env.nodes, self.env.edges
+        
+        # Initialize storage for graph items
         self.node_items = {}
         self.edge_items = {}
+        
+        # Draw edges first (so they appear under nodes)
+        self._draw_edges(edges)
+        
+        # Then draw nodes
+        self._draw_nodes(nodes)
 
+    def _draw_edges(self, edges):
+        """Draw edges on the graph"""
+        pen = QPen(QColor('grey'))
+        pen.setWidth(2)
+        
         for edge in edges:
-            start_node_id = edge.start_node.id
-            end_node_id = edge.end_node.id
-            start_pos = QPointF(nodes[start_node_id].x * 100, nodes[start_node_id].y * 100)
-            end_pos = QPointF(nodes[end_node_id].x * 100, nodes[end_node_id].y * 100)
-            line = HoverableGraphicsLineItem(edge, start_pos.x(), start_pos.y(), end_pos.x(), end_pos.y())
+            # Calculate edge positions
+            start_pos = self._get_node_position(edge.start_node)
+            end_pos = self._get_node_position(edge.end_node)
+            
+            # Create and configure edge item
+            line = HoverableGraphicsLineItem(
+                edge, 
+                start_pos.x(), 
+                start_pos.y(), 
+                end_pos.x(), 
+                end_pos.y()
+            )
             line.setPen(pen)
+            
+            # Add to scene and store reference
             self.scene.addItem(line)
             self.edge_items[edge.id] = line
-            self.edgeList.addItem(f"Edge {edge.id}: {edge.start_node.weight} -> {edge.end_node.weight}")
+            
+            # Add to edge list
+            self.edgeList.addItem(
+                f"Edge {edge.id}: {edge.start_node.weight} -> {edge.end_node.weight}"
+            )
 
+    def _draw_nodes(self, nodes):
+        """Draw nodes on the graph"""
         node_pen = QPen(QColor('grey'))
         node_brush = QColor('lightblue')
-
+        
         for node_id, node in nodes.items():
-            node_radius = 2
-            pos = QPointF(node.x * 100, node.y * 100)
-            if node.weight > 1:
-                node_radius = 5
-            circle = HoverableGraphicsEllipseItem(node, pos.x() - node_radius, pos.y() - node_radius, node_radius * 2, node_radius * 2)
+            # Calculate node size based on weight
+            node_radius = 5 if node.weight > 1 else 2
+            pos = self._get_node_position(node)
+            
+            # Create and configure node item
+            circle = HoverableGraphicsEllipseItem(
+                node,
+                pos.x() - node_radius,
+                pos.y() - node_radius,
+                node_radius * 2,
+                node_radius * 2
+            )
             circle.setPen(node_pen)
             circle.setBrush(node_brush)
+            
+            # Add to scene and store reference
             self.scene.addItem(circle)
             self.node_items[node.id] = circle
+            
+            # Add to node list
             self.nodeList.addItem(f"Node {node.id}: {node.weight}")
 
+    def _init_timeline(self):
+        """Initialize timeline visualization"""
+        pen = QPen(QColor('black'))
+        pen.setWidth(1)
+        
+        # Get the viewport size
+        width = self.timeline_view.viewport().width()
+        height = self.timeline_view.viewport().height()
+        
+        margin = 50  # Margin from edges
+        
+        # Draw axes using full width/height while respecting margins
+        self.timeline_scene.addLine(margin, height-margin, width-margin, height-margin, pen)  # X axis
+        self.timeline_scene.addLine(margin, margin, margin, height-margin, pen)    # Y axis
+        
+        # Add time labels with proper spacing
+        time_width = width - (2 * margin)
+        for i in range(5):
+            time_text = self.timeline_scene.addText(f"{i*6}:00")
+            time_text.setPos(margin + (i * time_width/4), height-margin+10)
+
+    def _get_node_position(self, node) -> QPointF:
+        """Convert node coordinates to scene coordinates"""
+        return QPointF(node.x * 100, node.y * 100)
+
+    def _create_node_list(self) -> QListWidget:
+        """Create and configure node list widget"""
+        node_list = QListWidget()
+        node_list.setFixedWidth(int(self.width() * 0.1))
+        node_list.itemClicked.connect(self.onNodeClicked)
+        return node_list
+
+    def _create_edge_list(self) -> QListWidget:
+        """Create and configure edge list widget"""
+        edge_list = QListWidget()
+        edge_list.setFixedWidth(int(self.width() * 0.1))
+        edge_list.itemClicked.connect(self.onEdgeClicked)
+        return edge_list
+
+    def _update_status(self):
+        """Update status bar information"""
+        self.status_labels['time'].setText(f"Time: {self.env.time}")
+        self.status_labels['status'].setText(
+            f"Status: {'Running' if self.env.is_running else 'Stopped'}"
+        )
+        self.status_labels['mode'].setText(f"Mode: {self.env.mode.value}")
+
     def onNodeClicked(self, item):
+        """Handle node list item click event"""
         node_id = item.text().split()[1].partition(":")[0]
         for node_id_key, circle in self.node_items.items():
             if str(node_id_key) == node_id:
                 self.flashNode(circle)
 
     def onEdgeClicked(self, item):
+        """Handle edge list item click event"""
         edge_id = item.text().split()[1].partition(":")[0]
         for edge_id_key, line in self.edge_items.items():
             if str(edge_id_key) == edge_id:
                 self.flashEdge(line)
 
     def flashNode(self, node_item):
+        """Highlight a node temporarily"""
         original_brush = node_item.brush()
         flash_brush = QColor('yellow')
 
@@ -208,6 +328,7 @@ class MetroWindow(QMainWindow):
         QTimer.singleShot(500, restore_brush)
 
     def flashEdge(self, edge_item):
+        """Highlight an edge temporarily"""
         original_pen = edge_item.pen()
         flash_pen = QPen(QColor('yellow'), 2)
 
@@ -223,8 +344,12 @@ class MetroWindow(QMainWindow):
     def zoomOut(self):
         self.view.scale(0.8, 0.8)
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MetroWindow()
-    window.show()
-    sys.exit(app.exec())
+    def addTimelinePoint(self, time, platform):
+        # Convert time and platform to coordinates
+        x = 50 + (time.hour * 60 + time.minute) * (500/1440)  # 1440 minutes in a day
+        y = 150 - (platform * 10)  # Adjust scaling as needed
+        
+        point = self.timeline_scene.addEllipse(x-2, y-2, 4, 4, 
+                                             QPen(QColor('blue')), 
+                                             QBrush(QColor('blue')))
+        return point
