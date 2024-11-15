@@ -2,6 +2,8 @@
 
 MetroRL is a Python-based metro system simulation and visualization tool. It provides a platform for experimenting with different train control strategies in both autonomous and delegated operation modes.
 
+![Background](background.png)
+
 ## Features
 
 - **Dual Operation Modes**
