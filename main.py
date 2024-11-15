@@ -9,7 +9,7 @@ The simulation can run with or without a GUI interface.
 
 Command line arguments:
     --nogui: Run without GUI (default: False)
-    --mode: Operation mode, either 'selfrolling' or 'delegated' (default: 'selfrolling')
+    --mode: Operation mode, either 'self_rolling' or 'delegated' (default: 'self_rolling')
 
 Example usage:
     python main.py  # Run with GUI in self-rolling mode
@@ -29,8 +29,6 @@ def run_with_gui(env):
     app = QApplication(sys.argv)
     window = MetroWindow(env)
     window.show()
-    
-    
     
     # Start simulation loop
     timer = QTimer()
@@ -57,13 +55,13 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='Metro System Simulation')
     parser.add_argument('--nogui', action='store_true', help='Run without GUI')
-    parser.add_argument('--mode', choices=['selfrolling', 'delegated'], 
-                       default='selfrolling', help='Operation mode')
+    parser.add_argument('--mode', choices=['self_rolling', 'delegated'], 
+                       default='self_rolling', help='Operation mode')
     args = parser.parse_args()
     
     # Create environment
     env = Environment(config=Config())
-    env.mode = Mode.SELFROLLING if args.mode == 'selfrolling' else Mode.DELEGATED
+    env.mode = Mode.SELFROLLING if args.mode == 'self_rolling' else Mode.DELEGATED
     
     # Add initial trains
     env.add_train(1)  # Add train at node 1 (d1)

@@ -19,7 +19,7 @@ from config import Config
 
 class Mode(Enum):
     """Operation mode for the environment"""
-    SELFROLLING = "selfrolling"  # Environment controls train movement
+    SELFROLLING = "self_rolling"  # Environment controls train movement
     DELEGATED = "delegated"      # External system controls train movement
 
 @dataclass
@@ -137,6 +137,10 @@ class Environment:
         """Get a train by ID"""
         return self.train_controller.get_train(train_id)
     
+    def get_all_trains(self):
+        """Get all trains in the environment"""
+        return self.train_controller.get_all_trains()
+
     def can_move_to(self, train, target_node):
         """
         Check if a train can move to the target node

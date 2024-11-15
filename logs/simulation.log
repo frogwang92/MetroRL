@@ -1,0 +1,1 @@
+2024-11-15 17:13:12,748 - environment - ERROR - Failed to initialize topology: 'LineSegment' object has no attribute 'travel_time'

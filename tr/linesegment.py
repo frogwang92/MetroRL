@@ -19,7 +19,8 @@ class LineSegment:
     def __init__(self, start_platform, end_platform, travel_time = 120):
         self.start_platform = start_platform
         self.end_platform = end_platform
-        self.travel_time = travel_time
+        self.weight = travel_time
+        self.id = str(start_platform.id) + "-" + str(end_platform.id)
 
     def __repr__(self):
-        return f"LineSegment(start_platform={self.start_platform}, end_platform={self.end_platform}, travel_time={self.travel_time})"
+        return f"LineSegment(start_platform={self.start_platform}, end_platform={self.end_platform}, travel_time={self.weight})"

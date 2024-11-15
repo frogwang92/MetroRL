@@ -35,7 +35,7 @@ def build_topology(platforms, line_segments, default_interval=1):
     for segment in line_segments:
         start_node = nodes[segment.start_platform.id]
         end_node = nodes[segment.end_platform.id]
-        travel_time = segment.travel_time
+        travel_time = segment.weight
 
         # Split the line segment into multiple nodes based on travel time
         num_intervals = travel_time // default_interval
@@ -64,7 +64,7 @@ def calc_coordinates_with_networkx(nodes, edges):
         G.add_edge(edge.start_node.id, edge.end_node.id, weight=edge.weight)
 
     # Calculate the coordinates using networkx layout
-    pos = nx.spring_layout(G, scale=4)
+    pos = nx.spring_layout(G, scale=2)
 
     # Update node coordinates
     for node_id, (x, y) in pos.items():

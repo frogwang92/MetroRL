@@ -6,7 +6,7 @@ from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from facility.platform import Platform
 from tr.linesegment import LineSegment
 from buildtopology import build_topology, calc_coordinates_with_networkx
-from linedata import platforms, line_segments
+from linedata import platforms, line_segments, calc_platform_positions
 
 class HoverableItem:
     """Mixin class for hoverable graphics items"""
@@ -88,10 +88,11 @@ class MetroWindow(QMainWindow):
         self._init_toolbar()
         self._init_statusbar()
         self._init_graph()
+        self.refresh_trains()
         
     def _init_window(self):
         """Initialize window properties"""
-        self.setWindowTitle("Metro Topology")
+        self.setWindowTitle("Metro RL Environment")
         self.setGeometry(100, 100, 1500, 800)
         self.setWindowIcon(QIcon('logo.ico'))
 
@@ -103,24 +104,44 @@ class MetroWindow(QMainWindow):
         self.view.setStyleSheet("border: 1px solid grey;")
         self.nodeList = self._create_node_list()
         self.edgeList = self._create_edge_list()
+        self.trainList = self._create_train_list()
         
         # Create timeline components
         self.timeline_scene = QGraphicsScene()
         self.timeline_view = CustomGraphicsView(self.timeline_scene, self)
         self.timeline_view.setStyleSheet("border: 1px solid grey;")
+
+        # Create topology components
+        self.topology_scene = QGraphicsScene()
+        self.topology_view = CustomGraphicsView(self.topology_scene, self)
+        self.topology_view.setStyleSheet("border: 1px solid grey;")
         
         # Setup layouts
+        toprow_layout = QHBoxLayout()
+        toprow_layout.addWidget(self.view, stretch=1)
+        toprow_layout.addWidget(self.topology_view, stretch=1)
+        toprow_layout.addWidget(self.nodeList)
+        toprow_layout.addWidget(self.edgeList)
+
+        toprow_widget = QWidget()
+        toprow_widget.setLayout(toprow_layout)
+
+        bottomrow_layout = QHBoxLayout()
+        bottomrow_layout.addWidget(self.timeline_view, stretch=1)
+        bottomrow_layout.addWidget(self.trainList, stretch=1)
+        bottomrow_widget = QWidget()
+        bottomrow_widget.setLayout(bottomrow_layout)
+
         graph_layout = QVBoxLayout()
-        graph_layout.addWidget(self.view, stretch=1)
-        graph_layout.addWidget(self.timeline_view, stretch=1)
+        graph_layout.addWidget(toprow_widget, stretch=1)
+        graph_layout.addWidget(bottomrow_widget, stretch=1)
         
         graph_widget = QWidget()
         graph_widget.setLayout(graph_layout)
         
         layout = QHBoxLayout()
         layout.addWidget(graph_widget)
-        layout.addWidget(self.nodeList)
-        layout.addWidget(self.edgeList)
+        
         layout.setContentsMargins(1, 1, 1, 1)
         
         centralWidget = QWidget()
@@ -164,6 +185,7 @@ class MetroWindow(QMainWindow):
         """Handle stop button click"""
         self.env.stop()
 
+    
     def _init_statusbar(self):
         """Initialize status bar and labels"""
         self.statusBar = QStatusBar()
@@ -176,9 +198,13 @@ class MetroWindow(QMainWindow):
             'mode': QLabel(f"Mode: {self.env.mode.value}")
         }
         
-        # Add labels to status bar
-        for label in self.status_labels.values():
-            self.statusBar.addPermanentWidget(label)
+        # Add time label to the left
+        self.statusBar.setContentsMargins(5, 0, 5, 2)
+        self.statusBar.addWidget(self.status_labels['time'])
+
+        # Add status and mode labels to the right
+        self.statusBar.addPermanentWidget(self.status_labels['status'])
+        self.statusBar.addPermanentWidget(self.status_labels['mode'])
             
         # Setup update timer
         self.statusTimer = QTimer()
@@ -198,6 +224,9 @@ class MetroWindow(QMainWindow):
         
         # Then draw nodes
         self._draw_nodes(nodes)
+
+        # draw platform nodes
+        self._draw_platform_nodes(platforms)
 
     def _draw_edges(self, edges):
         """Draw edges on the graph"""
@@ -256,6 +285,51 @@ class MetroWindow(QMainWindow):
             # Add to node list
             self.nodeList.addItem(f"Node {node.id}: {node.weight}")
 
+    def _draw_platform_nodes(self, platforms):
+        """Draw platform nodes on the topology canvas"""
+        positions = calc_platform_positions(platforms, 70, 70)
+        platform_pen = QPen(QColor('grey'))
+        platform_brush = QColor('lightblue')
+        line_pen = QPen(QColor('grey'))
+        line_pen.setWidth(2)
+
+        for platform in platforms:
+            # Calculate platform size
+            platform_radius = 6
+            pos = positions[platform]
+            
+            # Create and configure platform item
+            circle = HoverableGraphicsEllipseItem(
+                platform,
+                pos[0] - platform_radius,
+                pos[1] - platform_radius,
+                platform_radius * 2,
+                platform_radius * 2
+            )
+            circle.setPen(platform_pen)
+            circle.setBrush(platform_brush)
+            
+            # Add to topology scene and store reference
+            self.topology_scene.addItem(circle)
+            self.topology_scene.addText(f"{platform.name}").setPos(pos[0] - 10, pos[1] + 10)
+            # self.platform_items[platform.id] = circle
+            
+            # Add to platform list
+            # self.platformList.addItem(f"Platform {platform.id}")
+        for seg in line_segments:
+            start_pos = positions[seg.start_platform]
+            end_pos = positions[seg.end_platform]
+            line = HoverableGraphicsLineItem(
+                seg, 
+                start_pos[0], 
+                start_pos[1], 
+                end_pos[0], 
+                end_pos[1]
+            )
+            line.setPen(line_pen)
+            self.topology_scene.addItem(line)
+            # self.edge_items[edge
+
     def _get_node_position(self, node) -> QPointF:
         """Convert node coordinates to scene coordinates"""
         return QPointF(node.x * 100, node.y * 100)
@@ -273,6 +347,12 @@ class MetroWindow(QMainWindow):
         edge_list.setFixedWidth(int(self.width() * 0.1))
         edge_list.itemClicked.connect(self.onEdgeClicked)
         return edge_list
+
+    def _create_train_list(self) -> QListWidget:
+        """Create and configure train list widget"""
+        train_list = QListWidget()
+        train_list.setFixedWidth(int(self.width() * 0.2) + 2)
+        return train_list
 
     def _update_status(self):
         """Update status bar information"""
@@ -348,7 +428,10 @@ class MetroWindow(QMainWindow):
         """Update timeline visualization based on current viewport size"""
         self.timeline_scene.clear()
         pen = QPen(QColor('grey'))
-        pen.setWidth(1)
+        pen.setWidth(2)
+
+        pen2 = QPen(QColor('lightgrey'))
+        pen2.setWidth(1)
         
         # Get the viewport size
         width = self.timeline_view.viewport().width()
@@ -356,12 +439,34 @@ class MetroWindow(QMainWindow):
         
         margin = 40  # Margin from edges
         
+        interval = (height - (2 * margin)) / len(platforms)
+        for i in range(len(platforms)):
+            self.timeline_scene.addLine(margin, height-margin-(i*interval), width-margin, height-margin-(i*interval), pen2)
+            platform_text = self.timeline_scene.addText(f"P{i+1}")
+            platform_text_height = platform_text.boundingRect().height()
+            platform_text_width = platform_text.boundingRect().width()
+            platform_text.setPos(margin - platform_text_width / 2 - 15, height-margin-(i*interval) - platform_text_height / 2)
+
         # Draw axes using full width/height while respecting margins
         self.timeline_scene.addLine(margin, height-margin, width-margin, height-margin, pen)  # X axis
         self.timeline_scene.addLine(margin, margin, margin, height-margin, pen)    # Y axis
-        
+
         # Add time labels with proper spacing
         time_width = width - (2 * margin)
         for i in range(5):
             time_text = self.timeline_scene.addText(f"{i*6}:00")
             time_text.setPos(margin + (i * time_width/4), height-margin+10)
+
+    def refresh_trains(self):
+        """Refresh the train list with current train positions"""
+        def refresh():
+            self.trainList.clear()
+            for train in self.env.get_all_trains().values():
+                self.trainList.addItem(f"Train {train.id}: {train.state.current_node}")
+                # update the node color to green to indicate the train is there
+                for node_id_key, circle in self.node_items.items():
+                    if str(node_id_key) == str(train.state.current_node.id):
+                        circle.setBrush(QBrush(QColor('green')))
+                    else:
+                        circle.setBrush(QBrush(QColor('lightblue')))
+        QTimer.singleShot(500, refresh)

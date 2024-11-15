@@ -60,6 +60,25 @@ line_segments = [
 
 platforms = [d1, s11, s12, s13, s14, s15, s16, d2, s21, s22, s23, s24, s25, s26]
 
+# Create platform positions
+def calc_platform_positions(platforms, 
+                            horizontal_platform_interval, 
+                            vertical_platform_interval, 
+                            start_positon = (0, 0),
+                            offset = (0, 0)):
+    """Calculate the positions of the platforms"""
+    positions = {}
+    for p in platforms:
+        if p.name == "d1":
+            positions[p] = start_positon + offset
+        elif p.name == "d2":
+            positions[p] = (start_positon[0] + (len(platforms) / 2) * horizontal_platform_interval, start_positon[1]) + offset
+        elif p.name.startswith("s1"):
+            positions[p] = (start_positon[0] + horizontal_platform_interval * int(p.name[2:]), start_positon[1] + vertical_platform_interval) + offset
+        elif p.name.startswith("s2"):
+            positions[p] = (start_positon[0] + horizontal_platform_interval * int(p.name[2:]), start_positon[1] - vertical_platform_interval) + offset
+    return positions
+
 if __name__ == "__main__":
     # Print the created platforms and line segments
     for platform in platforms:
