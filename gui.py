@@ -88,7 +88,6 @@ class MetroWindow(QMainWindow):
         self._init_toolbar()
         self._init_statusbar()
         self._init_graph()
-        self._init_timeline()
         
     def _init_window(self):
         """Initialize window properties"""
@@ -101,12 +100,14 @@ class MetroWindow(QMainWindow):
         # Create main components
         self.scene = QGraphicsScene()
         self.view = CustomGraphicsView(self.scene, self)
+        self.view.setStyleSheet("border: 1px solid grey;")
         self.nodeList = self._create_node_list()
         self.edgeList = self._create_edge_list()
         
         # Create timeline components
         self.timeline_scene = QGraphicsScene()
         self.timeline_view = CustomGraphicsView(self.timeline_scene, self)
+        self.timeline_view.setStyleSheet("border: 1px solid grey;")
         
         # Setup layouts
         graph_layout = QVBoxLayout()
@@ -255,27 +256,6 @@ class MetroWindow(QMainWindow):
             # Add to node list
             self.nodeList.addItem(f"Node {node.id}: {node.weight}")
 
-    def _init_timeline(self):
-        """Initialize timeline visualization"""
-        pen = QPen(QColor('black'))
-        pen.setWidth(1)
-        
-        # Get the viewport size
-        width = self.timeline_view.viewport().width()
-        height = self.timeline_view.viewport().height()
-        
-        margin = 50  # Margin from edges
-        
-        # Draw axes using full width/height while respecting margins
-        self.timeline_scene.addLine(margin, height-margin, width-margin, height-margin, pen)  # X axis
-        self.timeline_scene.addLine(margin, margin, margin, height-margin, pen)    # Y axis
-        
-        # Add time labels with proper spacing
-        time_width = width - (2 * margin)
-        for i in range(5):
-            time_text = self.timeline_scene.addText(f"{i*6}:00")
-            time_text.setPos(margin + (i * time_width/4), height-margin+10)
-
     def _get_node_position(self, node) -> QPointF:
         """Convert node coordinates to scene coordinates"""
         return QPointF(node.x * 100, node.y * 100)
@@ -353,3 +333,35 @@ class MetroWindow(QMainWindow):
                                              QPen(QColor('blue')), 
                                              QBrush(QColor('blue')))
         return point
+
+    def resizeEvent(self, event):
+        """Handle window resize event to adjust timeline graph"""
+        super().resizeEvent(event)
+        self._update_timeline()
+
+    def showEvent(self, event):
+        """Handle window show event to adjust timeline graph"""
+        super().showEvent(event)
+        self._update_timeline()
+
+    def _update_timeline(self):
+        """Update timeline visualization based on current viewport size"""
+        self.timeline_scene.clear()
+        pen = QPen(QColor('grey'))
+        pen.setWidth(1)
+        
+        # Get the viewport size
+        width = self.timeline_view.viewport().width()
+        height = self.timeline_view.viewport().height()
+        
+        margin = 40  # Margin from edges
+        
+        # Draw axes using full width/height while respecting margins
+        self.timeline_scene.addLine(margin, height-margin, width-margin, height-margin, pen)  # X axis
+        self.timeline_scene.addLine(margin, margin, margin, height-margin, pen)    # Y axis
+        
+        # Add time labels with proper spacing
+        time_width = width - (2 * margin)
+        for i in range(5):
+            time_text = self.timeline_scene.addText(f"{i*6}:00")
+            time_text.setPos(margin + (i * time_width/4), height-margin+10)
