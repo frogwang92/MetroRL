@@ -16,7 +16,7 @@ class AlwaysMoveToNextPolicy:
         Returns:
             int: ID of the node to move to (either next node or current node if blocked)
         """
-        current_node = train.current_node
+        current_node = train.state.current_node
         next_nodes = env.get_next_nodes(current_node)
         
         if not next_nodes:

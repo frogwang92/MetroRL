@@ -18,7 +18,7 @@ class GUIConfig:
 @dataclass
 class SimConfig:
     update_interval: int = 1000  # ms
-    default_mode: str = 'SELFROLLING'
+    default_mode: str = 'self_rolling'
     
 class Config:
     def __init__(self, config_file: str = 'config.json'):

@@ -8,74 +8,133 @@ Classes:
     Environment: Main simulation environment that manages topology and trains
 """
 
+import threading
+import time
 from buildtopology import build_topology, calc_coordinates_with_networkx
 from traincontroller import TrainController
 from linedata import platforms, line_segments
 from enum import Enum
 from typing import Optional, Dict, List
 from dataclasses import dataclass
-from logger import setup_logger
+from logger import logger
 from config import Config
 
 class Mode(Enum):
     """Operation mode for the environment"""
     SELFROLLING = "self_rolling"  # Environment controls train movement
-    DELEGATED = "delegated"      # External system controls train movement
+    DELEGATED = "delegated"       # External system controls train movement
+
+class ClockMode(Enum):
+    """Clock mode for the environment"""
+    INTERNAL = "internal"  # Environment controls time
+    EXTERNAL = "external"  # External system controls time
 
 @dataclass
 class SimulationState:
     time: int = 0
     is_running: bool = False
-    mode: str = 'SELFROLLING'
+    mode: Mode = Mode.SELFROLLING
+
+class Clock:
+    def __init__(self, env, mode=ClockMode.INTERNAL, external_clock=None, interval=1):
+        self.env = env
+        self.mode = mode
+        self.external_clock = external_clock
+        self.time = 0
+        self.running = False
+        self.interval = interval  # Interval in seconds for self rolling mode
+
+    def tick(self):
+        if self.running:
+            if self.external_clock:
+                self.time = self.external_clock.get_time()
+            else:
+                self.time += 1
+            self.env.step()
+
+    def start(self):
+        self.running = True
+        if self.mode == ClockMode.INTERNAL:
+            threading.Thread(target=self._run).start()
+
+    def _run(self):
+        while self.running:
+            time.sleep(self.interval)
+            self.tick()
+
+    def pause(self):
+        self.running = False
+
+    def reset(self):
+        self.time = 0
+        self.running = False
+
+    def get_time(self):
+        return self.time
 
 class Environment:
-    def __init__(self, config: Config):
-        self.logger = setup_logger('environment', 'simulation.log')
+    def __init__(self, config: Config, clock=None):
+        logger.info("Initializing Environment")
         self.config = config
-        self.state = SimulationState(mode=config.sim.default_mode)
+        if config.sim.default_mode == 'self_rolling':
+            self.state = SimulationState(mode=Mode.SELFROLLING)
+        else:
+            self.state = SimulationState(mode=Mode.DELEGATED)
+        self.clock = clock if clock else Clock(self)
         
         # Initialize components
         self._init_topology()
         self._init_controller()
-        
+        logger.info("Environment initialized")
+
     def _init_topology(self):
         """Initialize network topology"""
+        logger.info("Initializing topology")
         try:
             self.nodes, self.edges = build_topology(platforms, line_segments)
             self.nodes = calc_coordinates_with_networkx(self.nodes, self.edges)
+            logger.info("Topology initialized")
         except Exception as e:
-            self.logger.error(f"Failed to initialize topology: {e}")
+            logger.error(f"Failed to initialize topology: {e}")
             raise
-            
+
     def _init_controller(self):
         """Initialize train controller"""
+        logger.info("Initializing train controller")
         self.train_controller = TrainController()
         self._load_policy()
-        
+        logger.info("Train controller initialized")
+
     def _load_policy(self):
         """Load movement policy based on mode"""
-        if self.state.mode == 'SELFROLLING':
+        logger.info(f"Loading policy for mode: {self.state.mode}")
+        if self.state.mode == Mode.SELFROLLING:
             from policies.alwaysmovetonext import AlwaysMoveToNextPolicy
             self.policy = AlwaysMoveToNextPolicy()
         else:
             from policies.delegated import DelegatedPolicy
             self.policy = DelegatedPolicy()
-        
+        logger.info("Policy loaded")
+
     def add_train(self, initial_node_id):
         """
         Add a new train to the environment
-        
+
         Args:
             initial_node_id: ID of node where train should start
-            
+
         Returns:
             Created train object or None if node not found
         """
+        logger.info(f"Adding train at node {initial_node_id}")
         if initial_node_id not in self.nodes:
+            logger.warning(f"Node {initial_node_id} not found")
             return None
-            
-        return self.train_controller.create_train(self.nodes[initial_node_id])
-        
+
+        train = self.train_controller.create_train(self.nodes[initial_node_id])
+        logger.info(f"Train added: {train}")
+        return train
+
     def remove_train(self, train_id):
         """
         Remove a train from the environment
@@ -86,7 +145,13 @@ class Environment:
         Returns:
             True if train was removed, False otherwise
         """
-        return self.train_controller.remove_train(train_id)
+        logger.info(f"Removing train with ID {train_id}")
+        result = self.train_controller.remove_train(train_id)
+        if result:
+            logger.info(f"Train {train_id} removed")
+        else:
+            logger.warning(f"Train {train_id} not found")
+        return result
         
     def step(self):
         """
@@ -97,30 +162,38 @@ class Environment:
         """
         if not self.state.is_running:
             return self.state.time
-            
+
+        logger.info("Advancing simulation by one time step")
         # Update train positions
         for train in self.train_controller.get_all_trains().values():
             if self.state.mode == Mode.SELFROLLING:
                 next_node = self.policy.get_action(train, self)
-                if next_node != train.current_node:
-                    train.move_to(next_node)
-            
-        self.state.time += 1
+                if next_node != train.state.current_node:
+                    train.move_to_node(next_node)
+
+        self.state.time = self.clock.get_time()
+        logger.info(f"Simulation time: {self.state.time}")
         return self.state.time
         
     def start(self):
         """Start the simulation"""
+        logger.info("Starting simulation")
         self.state.is_running = True
+        self.clock.start()
         
     def pause(self):
         """Pause the simulation"""
+        logger.info("Pausing simulation")
         self.state.is_running = False
+        self.clock.pause()
         
     def reset(self):
         """Reset the simulation to initial state"""
+        logger.info("Resetting simulation")
         self.state.time = 0
         self.state.is_running = False
         self.train_controller = TrainController()
+        self.clock.reset()
         
     def get_node(self, node_id):
         """Get a node by ID"""
@@ -153,17 +226,13 @@ class Environment:
             bool: True if movement is allowed, False otherwise
         """
         # Get current and target node objects
-        current_node = train.current_node
-        target = self.get_node(target_node)
-        
-        if not target:
-            return False
+        current_node = train.state.current_node
             
         # Check if nodes are connected by an edge
         connected = False
         for edge in self.edges:
-            if (edge.start_node.id == current_node and edge.end_node.id == target_node) or \
-               (edge.end_node.id == current_node and edge.start_node.id == target_node):
+            if (edge.start_node == current_node and edge.end_node == target_node) or \
+               (edge.end_node == current_node and edge.start_node == target_node):
                 connected = True
                 break
                 
@@ -172,7 +241,7 @@ class Environment:
             
         # Check if target node is occupied by another train
         for other_train in self.train_controller.get_all_trains().values():
-            if other_train.id != train.id and other_train.current_node == target_node:
+            if other_train.id != train.id and other_train.state.current_node == target_node:
                 return False
                 
         return True
@@ -192,7 +261,7 @@ class Environment:
         # Check all edges for connections to current node
         for edge in self.edges:
             # Check forward direction
-            if edge.start_node.id == current_node:
+            if edge.start_node == current_node:
                 possible_nodes.append(edge.end_node)
                 
             # Check reverse direction

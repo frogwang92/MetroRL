@@ -23,17 +23,13 @@ from gui import MetroWindow, QApplication
 import time
 from PyQt6.QtCore import QTimer
 from config import Config
+from logger import logger, setup_logger
 
 def run_with_gui(env):
     """Run simulation with GUI"""
     app = QApplication(sys.argv)
     window = MetroWindow(env)
     window.show()
-    
-    # Start simulation loop
-    timer = QTimer()
-    timer.timeout.connect(env.step)
-    timer.start(1000)  # 1 second intervals
     
     return app.exec()
 
@@ -45,7 +41,7 @@ def run_without_gui(env):
             env.step()
             time.sleep(1)  # 1 second intervals
     except KeyboardInterrupt:
-        print("\nSimulation stopped by user")
+        logger.info("Simulation stopped by user")
     finally:
         env.reset()
 
@@ -58,19 +54,24 @@ def main():
     parser.add_argument('--mode', choices=['self_rolling', 'delegated'], 
                        default='self_rolling', help='Operation mode')
     args = parser.parse_args()
-    
+    logger.info("Starting Metro System Simulation")
+    logger.info(f"Mode: {args.mode}")
+    logger.info(f"GUI: {'Disabled' if args.nogui else 'Enabled'}")
     # Create environment
     env = Environment(config=Config())
-    env.mode = Mode.SELFROLLING if args.mode == 'self_rolling' else Mode.DELEGATED
-    
+    logger.info("Environment created")
+
     # Add initial trains
     env.add_train(1)  # Add train at node 1 (d1)
     env.add_train(8)  # Add train at node 8 (d2)
+    logger.info("Initial trains added")
     
     # Run simulation
     if args.nogui:
+        logger.info("Running simulation without GUI")
         run_without_gui(env)
     else:
+        logger.info("Running simulation with GUI")
         return run_with_gui(env)
 
 if __name__ == "__main__":
