@@ -91,7 +91,7 @@ class Environment:
         """Initialize network topology"""
         logger.info("Initializing topology")
         try:
-            self.nodes, self.edges = build_topology(platforms, line_segments)
+            self.nodes, self.edges, self.segments, self.node2segments = build_topology(platforms, line_segments)
             self.nodes = calc_coordinates_with_networkx(self.nodes, self.edges)
             logger.info("Topology initialized")
         except Exception as e:

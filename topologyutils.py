@@ -107,3 +107,30 @@ def print_routes(routes):
         print(f"  Path: {path}")
         print(f"  Length: {len(route.nodes)} nodes")
         print()
+
+def node_in_edge_percentage(node, edge):
+    """
+    Calculate the percentage of a node's position within an edge
+    
+    Args:
+        node (Node): Node to calculate percentage for
+        edge (Edge): Edge containing the node
+        
+    Returns:
+        float: Percentage of node's position within the edge
+    
+    Usage example:
+        # Calculate node position within edge
+        edge = env.get_edge(1, 2)  # Edge between nodes 1 and 2
+        node = env.get_node(1)     # Node 1
+        percentage = node_in_edge_percentage(node, edge)
+        print(f"Node 1 is at {percentage:.2%} within edge 1-2")
+    
+    Example output:
+        Node 1 is at 0.00% within edge 1-2
+    """
+    edge_length = edge.length
+    distance = edge.start_node.distance_to(node)
+    # travese the edge from start to end
+    
+    return distance / edge_length
