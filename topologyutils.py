@@ -1,5 +1,6 @@
 from topology.route import Route
 from functools import lru_cache
+from logger import logger
 
 @lru_cache(maxsize=128)
 def get_possible_routes(env, start_node, look_forward):
@@ -108,29 +109,69 @@ def print_routes(routes):
         print(f"  Length: {len(route.nodes)} nodes")
         print()
 
-def node_in_edge_percentage(node, edge):
+def get_nodes_in_segment(env, segment):
     """
-    Calculate the percentage of a node's position within an edge
+    Get all nodes in a specific segment
     
     Args:
-        node (Node): Node to calculate percentage for
-        edge (Edge): Edge containing the node
+        env (Environment): The environment containing topology information
+        segment (int): Segment number to get nodes from
         
     Returns:
-        float: Percentage of node's position within the edge
+        list[Node]: List of nodes in the segment
     
     Usage example:
-        # Calculate node position within edge
-        edge = env.get_edge(1, 2)  # Edge between nodes 1 and 2
-        node = env.get_node(1)     # Node 1
-        percentage = node_in_edge_percentage(node, edge)
-        print(f"Node 1 is at {percentage:.2%} within edge 1-2")
+        # Get all nodes in segment 1
+        nodes = get_nodes_in_segment(env, 1)
+        print(f"Nodes in segment 1: {nodes}")
     
     Example output:
-        Node 1 is at 0.00% within edge 1-2
+        Nodes in segment 1: [1, 2, 3, 4]
     """
-    edge_length = edge.length
-    distance = edge.start_node.distance_to(node)
-    # travese the edge from start to end
+    return [node.id for node in env.nodes if node.segment == segment]
+
+def node_in_segment_percentage(env, node):
+    """
+    Calculate the percentage of nodes in a segment that are of a specific type
     
-    return distance / edge_length
+    Args:
+        node (Node): Node to check
+    
+    Returns:
+        float: Percentage of nodes in the segment that are of the same type
+    
+    Usage example:
+        # Calculate the percentage of nodes in segment 1 that are of type 'router'
+        segment = env.get_segment(1)
+        percentage = node_in_segment_percentage(segment, 'router')
+        print(f"Percentage of routers in segment 1: {percentage}%")
+    
+    Example output:
+        Percentage of routers in segment 1: 50%
+    """
+    # iter from start
+    startsegment = env.node2segments[startnode.id]
+    startnode = env.segments[startsegment][0]
+    currentlength = 0
+    totallength = 0
+    found = False
+    nextnode = startnode
+    nextsegment = env.node2segments[nextnode]
+    while nextnode and nextsegment == startsegment:
+        # if node not found, increment length
+        if not found:
+            currentlength += nextnode.weight
+            totallength += nextnode.weight
+        else:
+            totallength += nextnode.weight
+        # if node found, set found to true
+        if nextnode == node:
+            found = True
+        # get next node
+        nextnode = env.nextnode.next
+        nextsegment = env.node2segments[nextnode]
+    
+    # calculate percentage
+    percentage = currentlength / totallength
+    logger.info("Calculated percentage: %f", percentage)
+    return percentage
