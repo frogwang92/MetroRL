@@ -39,7 +39,7 @@ def build_topology(platforms, line_segments, default_interval=1):
         start_node = nodes[segment.start_platform.id]
         end_node = nodes[segment.end_platform.id]
         travel_time = segment.weight
-        segments[(start_node.id, end_node.id)] = segment
+        segments[segment] = (start_node.id, end_node.id)
         node2segments[start_node.id] = segment
         segments2nodes[segment] = []
         segments2nodes[segment].append(start_node)

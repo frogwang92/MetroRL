@@ -1,5 +1,6 @@
 from topology.route import Route
 from functools import lru_cache
+from logger import logger
 
 @lru_cache(maxsize=128)
 def get_possible_routes(env, start_node, look_forward):
