@@ -36,7 +36,7 @@ class SimulationState:
     mode: Mode = Mode.SELFROLLING
 
 class Clock:
-    def __init__(self, env, mode=ClockMode.INTERNAL, external_clock=None, interval=1):
+    def __init__(self, env, mode=ClockMode.INTERNAL, external_clock=None, interval=0.1):
         self.env = env
         self.mode = mode
         self.external_clock = external_clock
@@ -91,7 +91,7 @@ class Environment:
         """Initialize network topology"""
         logger.info("Initializing topology")
         try:
-            self.nodes, self.edges, self.segments, self.node2segments = build_topology(platforms, line_segments)
+            self.nodes, self.edges, self.segments, self.node2segments, self.segment2nodes = build_topology(platforms, line_segments)
             self.nodes = calc_coordinates_with_networkx(self.nodes, self.edges)
             logger.info("Topology initialized")
         except Exception as e:

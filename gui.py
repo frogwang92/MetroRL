@@ -6,6 +6,7 @@ from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from facility.platform import Platform
 from tr.linesegment import LineSegment
 from buildtopology import build_topology, calc_coordinates_with_networkx
+from topologyutils import node_in_segment_percentage
 from linedata import platforms, line_segments, calc_platform_positions
 from logger import logger, add_logger_to_gui
 
@@ -89,13 +90,7 @@ class MetroWindow(QMainWindow):
         self._init_toolbar()
         self._init_statusbar()
         self._init_graph()
-        self.refresh_trains()
         add_logger_to_gui(logger, self.log_view)
-
-        # Set up a timer to refresh trains every 500ms
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(self.refresh_trains)
-        self.refresh_timer.start(500)
 
     def _init_window(self):
         """Initialize window properties"""
@@ -223,6 +218,16 @@ class MetroWindow(QMainWindow):
         # Initialize storage for graph items
         self.node_items = {}
         self.edge_items = {}
+
+        # Get the viewport size
+        self.timeline_width = self.timeline_view.viewport().width()
+        self.timeline_height = self.timeline_view.viewport().height()
+        
+        self.maxtime = 6 * 3600
+        self.timeline_margin = 40  # Margin from edges
+        self.timeline_tickwidth = (self.timeline_width - 2 * self.timeline_margin) / self.maxtime
+        
+        self.platform_horiz_pos = {}
 
         # Draw edges first (so they appear under nodes)
         self._draw_edges(edges)
@@ -418,16 +423,11 @@ class MetroWindow(QMainWindow):
         logger.info("Zooming out")
         self.view.scale(0.8, 0.8)
 
-    def addTimelinePoint(self, time, platform):
-        logger.info(f"Adding timeline point: time={time}, platform={platform}")
-        # Convert time and platform to coordinates
-        x = 50 + (time.hour * 60 + time.minute) * (500/1440)  # 1440 minutes in a day
-        y = 150 - (platform * 10)  # Adjust scaling as needed
-
-        point = self.timeline_scene.addEllipse(x-2, y-2, 4, 4, 
-                                             QPen(QColor('blue')), 
-                                             QBrush(QColor('blue')))
-        return point
+    def _add_timeline_point(self, x, y):
+        """Add a point to the timeline visualization"""
+        point = QGraphicsEllipseItem(x, y, 2, 2)
+        point.setBrush(QBrush(QColor('red')))
+        self.timeline_scene.addItem(point)
 
     def resizeEvent(self, event):
         """Handle window resize event to adjust timeline graph"""
@@ -443,7 +443,6 @@ class MetroWindow(QMainWindow):
 
     def _update_timeline(self):
         """Update timeline visualization based on current viewport size"""
-        logger.info("Updating timeline")
         self.timeline_scene.clear()
         pen = QPen(QColor('grey'))
         pen.setWidth(2)
@@ -452,27 +451,39 @@ class MetroWindow(QMainWindow):
         pen2.setWidth(1)
 
         # Get the viewport size
-        width = self.timeline_view.viewport().width()
-        height = self.timeline_view.viewport().height()
+        self.timeline_width = self.timeline_view.viewport().width()
+        self.timeline_height = self.timeline_view.viewport().height()
+        
+        self.maxtime = 6 * 3600
+        self.timeline_margin = 40  # Margin from edges
+        self.timeline_tickwidth = (self.timeline_width - 2 * self.timeline_margin) / self.maxtime
+        
+        self.platform_horiz_pos = {}
 
-        margin = 40  # Margin from edges
+        interval = (self.timeline_height - (2 * self.timeline_margin)) / len(platforms)
 
-        interval = (height - (2 * margin)) / len(platforms)
         for i in range(len(platforms)):
-            self.timeline_scene.addLine(margin, height-margin-(i*interval), width-margin, height-margin-(i*interval), pen2)
+            # Draw platform lines
+            self.platform_horiz_pos[platforms[i]] = self.timeline_height-self.timeline_margin-(i*interval)
+            self.timeline_scene.addLine(self.timeline_margin, self.platform_horiz_pos[platforms[i]], self.timeline_width-self.timeline_margin, self.platform_horiz_pos[platforms[i]], pen2)
             platform_text = self.timeline_scene.addText(f"P{i+1}")
             platform_text_height = platform_text.boundingRect().height()
             platform_text_width = platform_text.boundingRect().width()
-            platform_text.setPos(margin - platform_text_width / 2 - 15, height-margin-(i*interval) - platform_text_height / 2)
+            platform_text.setPos(self.timeline_margin - platform_text_width / 2 - 15, self.platform_horiz_pos[platforms[i]] - platform_text_height / 2)
 
         # Draw axes using full width/height while respecting margins
-        self.timeline_scene.addLine(margin, height-margin, width-margin, height-margin, pen)  # X axis
-        self.timeline_scene.addLine(margin, margin, margin, height-margin, pen)    # Y axis
+        self.timeline_scene.addLine(self.timeline_margin, self.timeline_height-self.timeline_margin, self.timeline_width-self.timeline_margin, self.timeline_height-self.timeline_margin, pen)  # X axis
+        self.timeline_scene.addLine(self.timeline_margin, self.timeline_margin, self.timeline_margin, self.timeline_height-self.timeline_margin, pen)    # Y axis
         # Add time labels with proper spacing
-        time_width = width - (2 * margin)
-        for i in range(5):
-            time_text = self.timeline_scene.addText(f"{i*6}:00")
-            time_text.setPos(margin + (i * time_width/4), height-margin+10)
+        # time_width = width - (2 * margin)
+        # for i in range(5):
+        #     time_text = self.timeline_scene.addText(f"{i*6}:00")
+        #     time_text.setPos(margin + (i * time_width/4), height-margin+10)
+
+        # Set up a timer to refresh trains every 500ms
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.refresh_trains)
+        self.refresh_timer.start(500)
 
     def refresh_trains(self):
         self.trainList.clear()
@@ -484,6 +495,17 @@ class MetroWindow(QMainWindow):
                     circle.setBrush(QBrush(QColor('green')))
                 else:
                     circle.setBrush(QBrush(QColor('lightblue')))
+            # now for each train, add a point
+        for train in self.env.get_all_trains().values():
+            # calculate the x 
+            x = self.timeline_margin + self.env.state.time * self.timeline_tickwidth
+            # claculate the y
+            segment = self.env.node2segments[train.state.current_node.id]
+            startplat = segment.start_platform
+            endplat = segment.end_platform
+            y = self.platform_horiz_pos[startplat] - (self.platform_horiz_pos[startplat] - self.platform_horiz_pos[endplat]) * node_in_segment_percentage(train.state.current_node, segment, self.env.segment2nodes)
+
+            self._add_timeline_point(x, y)
 
     def _on_start(self):
         """Handle start button click"""

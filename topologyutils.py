@@ -108,29 +108,32 @@ def print_routes(routes):
         print(f"  Length: {len(route.nodes)} nodes")
         print()
 
-def node_in_edge_percentage(node, edge):
+def node_in_segment_percentage(node, segment, segment2nodes):
     """
-    Calculate the percentage of a node's position within an edge
+    Calculate the percentage of a node's presence in a segment
     
     Args:
-        node (Node): Node to calculate percentage for
-        edge (Edge): Edge containing the node
+        node (Node): The node to check
+        segment (str): The segment identifier
+        segment2nodes (dict): Dictionary mapping segment identifiers to lists of nodes
         
     Returns:
-        float: Percentage of node's position within the edge
-    
-    Usage example:
-        # Calculate node position within edge
-        edge = env.get_edge(1, 2)  # Edge between nodes 1 and 2
-        node = env.get_node(1)     # Node 1
-        percentage = node_in_edge_percentage(node, edge)
-        print(f"Node 1 is at {percentage:.2%} within edge 1-2")
-    
-    Example output:
-        Node 1 is at 0.00% within edge 1-2
+        float: Percentage of the node's presence in the segment
     """
-    edge_length = edge.length
-    distance = edge.start_node.distance_to(node)
-    # travese the edge from start to end
+    if segment not in segment2nodes:
+        return -1
     
-    return distance / edge_length
+    nodes_in_segment = segment2nodes[segment]
+    total_weight = sum(node.weight for node in nodes_in_segment)
+    
+    if total_weight == 0:
+        return -1
+    
+    # sum the weight of the nodes in the segment until the given node
+    cumulative_weight = 0
+    for n in nodes_in_segment:
+        cumulative_weight += n.weight
+        if n.id == node.id:
+            break
+        
+    return (cumulative_weight / total_weight) 

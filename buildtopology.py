@@ -28,6 +28,7 @@ def build_topology(platforms, line_segments, default_interval=1):
     edges = []
     segments = {}
     node2segments = {}
+    segments2nodes = {}
 
     # Convert platforms to nodes
     for platform in platforms:
@@ -40,6 +41,8 @@ def build_topology(platforms, line_segments, default_interval=1):
         travel_time = segment.weight
         segments[(start_node.id, end_node.id)] = segment
         node2segments[start_node.id] = segment
+        segments2nodes[segment] = []
+        segments2nodes[segment].append(start_node)
         
         # Split the line segment into multiple nodes based on travel time
         num_intervals = travel_time // default_interval
@@ -49,13 +52,15 @@ def build_topology(platforms, line_segments, default_interval=1):
             intermediate_node_id = f"{segment.start_platform.id}-{segment.end_platform.id}-{i}"
             intermediate_node = Node(intermediate_node_id, default_interval)
             nodes[intermediate_node_id] = intermediate_node
+            segments2nodes[segment].append(intermediate_node)
             node2segments[intermediate_node_id] = segment
             edges.append(Edge(f"{previous_node.id}-{intermediate_node_id}", previous_node, intermediate_node, default_interval))
             previous_node = intermediate_node
 
         edges.append(Edge(f"{previous_node.id}-{end_node.id}", previous_node, end_node, travel_time % default_interval))
+        segments2nodes[segment].append(end_node)
 
-    return nodes, edges, segments, node2segments
+    return nodes, edges, segments, node2segments, segments2nodes
 
 def calc_coordinates_with_networkx(nodes, edges):
     G = nx.Graph()
