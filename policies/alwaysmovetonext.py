@@ -24,6 +24,11 @@ class AlwaysMoveToNextPolicy:
             return current_node
             
         import random
+        actions = [0, 1]
+        action = random.choice(actions)
+        if action == 0:
+            return current_node
+        
         next_node = random.choice(next_nodes)  # Take random available next node
         
         # Check if movement to next node is allowed by environment

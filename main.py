@@ -62,8 +62,10 @@ def main():
     logger.info("Environment created")
 
     # Add initial trains
-    env.add_train(1)  # Add train at node 1 (d1)
-    env.add_train(8)  # Add train at node 8 (d2)
+    import testcaseutils
+    platforms = testcaseutils.random_train_generator(env, 12)
+    for platform in platforms:
+        env.add_train(platform.id)
     logger.info("Initial trains added")
     
     # Run simulation

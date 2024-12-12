@@ -90,12 +90,12 @@ class MetroWindow(QMainWindow):
         self._init_toolbar()
         self._init_statusbar()
         self._init_graph()
-        add_logger_to_gui(logger, self.log_view)
+        # add_logger_to_gui(logger, self.log_view)
 
     def _init_window(self):
         """Initialize window properties"""
         logger.info("Initializing window")
-        self.setWindowTitle("Metro System Simulation")
+        self.setWindowTitle("Metro RL Environment")
         self.setGeometry(100, 100, 1500, 800)
         self.setWindowIcon(QIcon('logo.ico'))
 
@@ -218,6 +218,7 @@ class MetroWindow(QMainWindow):
         # Initialize storage for graph items
         self.node_items = {}
         self.edge_items = {}
+        self.train_items = {}
 
         # Get the viewport size
         self.timeline_width = self.timeline_view.viewport().width()
@@ -299,7 +300,7 @@ class MetroWindow(QMainWindow):
     def _draw_platform_nodes(self, platforms):
         """Draw platform nodes on the topology canvas"""
         logger.info("Drawing platform nodes")
-        positions = calc_platform_positions(platforms, 70, 70)
+        self.plat_positions = calc_platform_positions(platforms, 70, 70)
         platform_pen = QPen(QColor('grey'))
         platform_brush = QColor('lightblue')
         line_pen = QPen(QColor('grey'))
@@ -307,7 +308,7 @@ class MetroWindow(QMainWindow):
         for platform in platforms:
             # Calculate platform size
             platform_radius = 6
-            pos = positions[platform]
+            pos = self.plat_positions[platform]
 
             # Create and configure platform item
             circle = HoverableGraphicsEllipseItem(
@@ -327,8 +328,8 @@ class MetroWindow(QMainWindow):
             # Add to platform list
             # self.platformList.addItem(f"Platform {platform.id}")
         for seg in line_segments:
-            start_pos = positions[seg.start_platform]
-            end_pos = positions[seg.end_platform]
+            start_pos = self.plat_positions[seg.start_platform]
+            end_pos = self.plat_positions[seg.end_platform]
             line = HoverableGraphicsLineItem(
                 seg, 
                 start_pos[0], 
@@ -343,6 +344,18 @@ class MetroWindow(QMainWindow):
     def _get_node_position(self, node) -> QPointF:
         """Convert node coordinates to scene coordinates"""
         return QPointF(node.x * 100, node.y * 100)
+
+    def _get_node_positon_in_topology(self, node) -> QPointF:
+        """Convert node coordinates to topology scene coordinates"""
+        # find the segment that the node is in
+        segment = self.env.node2segments[node.id]
+        start_position = self.plat_positions[segment.start_platform]
+        end_position = self.plat_positions[segment.end_platform]
+        offset = node_in_segment_percentage(node, segment, self.env.segment2nodes)
+        x = start_position[0] + (end_position[0] - start_position[0]) * offset
+        y = start_position[1] + (end_position[1] - start_position[1]) * offset
+        # logger.info(f"Node {node.id} is at {x}, {y}")
+        return QPointF(x, y)
 
     def _create_node_list(self) -> QListWidget:
         """Create and configure node list widget"""
@@ -426,7 +439,8 @@ class MetroWindow(QMainWindow):
     def _add_timeline_point(self, x, y):
         """Add a point to the timeline visualization"""
         point = QGraphicsEllipseItem(x, y, 2, 2)
-        point.setBrush(QBrush(QColor('red')))
+        point.setBrush(QBrush(QColor('green')))
+        point.setPen(QPen(Qt.PenStyle.NoPen))  # No border
         self.timeline_scene.addItem(point)
 
     def resizeEvent(self, event):
@@ -466,7 +480,7 @@ class MetroWindow(QMainWindow):
             # Draw platform lines
             self.platform_horiz_pos[platforms[i]] = self.timeline_height-self.timeline_margin-(i*interval)
             self.timeline_scene.addLine(self.timeline_margin, self.platform_horiz_pos[platforms[i]], self.timeline_width-self.timeline_margin, self.platform_horiz_pos[platforms[i]], pen2)
-            platform_text = self.timeline_scene.addText(f"P{i+1}")
+            platform_text = self.timeline_scene.addText(f"{platforms[i].name}")
             platform_text_height = platform_text.boundingRect().height()
             platform_text_width = platform_text.boundingRect().width()
             platform_text.setPos(self.timeline_margin - platform_text_width / 2 - 15, self.platform_horiz_pos[platforms[i]] - platform_text_height / 2)
@@ -506,6 +520,24 @@ class MetroWindow(QMainWindow):
             y = self.platform_horiz_pos[startplat] - (self.platform_horiz_pos[startplat] - self.platform_horiz_pos[endplat]) * node_in_segment_percentage(train.state.current_node, segment, self.env.segment2nodes)
 
             self._add_timeline_point(x, y)
+
+            # calculate train position in graph scene
+
+            if train in self.train_items:
+                trainitem = self.train_items[train]
+                self.topology_scene.removeItem(trainitem)
+                # trainitem.setPos(self._get_node_positon_in_topology(train.state.current_node))
+            
+            trainitem = HoverableGraphicsEllipseItem(
+                train.state.current_node,
+                self._get_node_positon_in_topology(train.state.current_node).x() - 5,
+                self._get_node_positon_in_topology(train.state.current_node).y() - 5,
+                10,
+                10
+            )
+            trainitem.setBrush(QBrush(QColor('red')))
+            self.topology_scene.addItem(trainitem)
+            self.train_items[train] = trainitem
 
     def _on_start(self):
         """Handle start button click"""

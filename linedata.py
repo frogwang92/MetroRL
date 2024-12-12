@@ -58,7 +58,7 @@ line_segments = [
     LineSegment(s21, d1)
 ]
 
-platforms = [d1, s11, s12, s13, s14, s15, s16, d2, s21, s22, s23, s24, s25, s26]
+platforms = [d1, s11, s12, s13, s14, s15, s16, d2, s26, s25, s24, s23, s22, s21]
 
 # Create platform positions
 def calc_platform_positions(platforms, 

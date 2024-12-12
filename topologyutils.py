@@ -122,17 +122,22 @@ def node_in_segment_percentage(node, segment, segment2nodes):
         float: Percentage of the node's presence in the segment
     """
     if segment not in segment2nodes:
-        return -1
+        return 0
     
     nodes_in_segment = segment2nodes[segment]
-    total_weight = sum(node.weight for node in nodes_in_segment)
+    if node == nodes_in_segment[0]:
+        return 0
+    if node == nodes_in_segment[-1]:
+        return 1
+    intermediate_nodes = nodes_in_segment[1:-1]
+    total_weight = sum(node.weight for node in intermediate_nodes)
     
     if total_weight == 0:
-        return -1
+        return 0
     
     # sum the weight of the nodes in the segment until the given node
     cumulative_weight = 0
-    for n in nodes_in_segment:
+    for n in intermediate_nodes:
         cumulative_weight += n.weight
         if n.id == node.id:
             break

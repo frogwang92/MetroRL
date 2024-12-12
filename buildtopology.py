@@ -118,7 +118,7 @@ if __name__ == "__main__":
         LineSegment(s21, d1)
     ]
 
-    platforms = [d1, s11, s12, s13, s14, s15, s16, d2, s21, s22, s23, s24, s25, s26]
+    platforms = [d1, s11, s12, s13, s14, s15, s16, d2, s26, s25, s24, s23, s22, s21]
 
     nodes, edges = build_topology(platforms, line_segments)
     nodes = calc_coordinates_with_networkx(nodes, edges)
