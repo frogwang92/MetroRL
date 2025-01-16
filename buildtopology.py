@@ -23,8 +23,12 @@ from topology.node import Node
 from topology.edge import Edge
 from tr.linesegment import LineSegment
 
+INTERMEDIATE_NODE_START = 100
+EDGE_START = 1
+
 def build_topology(platforms, line_segments, default_interval=1):
     nodes = {}
+    platform_nodes = {}
     edges = []
     segments = {}
     node2segments = {}
@@ -33,8 +37,11 @@ def build_topology(platforms, line_segments, default_interval=1):
     # Convert platforms to nodes
     for platform in platforms:
         nodes[platform.id] = Node(platform.id, platform.dwell)
+        platform_nodes[platform.id] = nodes[platform.id]
 
     # Convert line segments to nodes and edges
+    start_node_id = INTERMEDIATE_NODE_START
+    start_edge_id = EDGE_START
     for segment in line_segments:
         start_node = nodes[segment.start_platform.id]
         end_node = nodes[segment.end_platform.id]
@@ -49,18 +56,23 @@ def build_topology(platforms, line_segments, default_interval=1):
         previous_node = start_node
 
         for i in range(1, int(num_intervals)):
-            intermediate_node_id = f"{segment.start_platform.id}-{segment.end_platform.id}-{i}"
+            # intermediate_node_id = f"{segment.start_platform.id}-{segment.end_platform.id}-{i}"
+            start_node_id += 1
+            intermediate_node_id = start_node_id
             intermediate_node = Node(intermediate_node_id, default_interval)
             nodes[intermediate_node_id] = intermediate_node
             segments2nodes[segment].append(intermediate_node)
             node2segments[intermediate_node_id] = segment
-            edges.append(Edge(f"{previous_node.id}-{intermediate_node_id}", previous_node, intermediate_node, default_interval))
+            
+            # edges.append(Edge(f"{previous_node.id}-{intermediate_node_id}", previous_node, intermediate_node, default_interval))
+            edges.append(Edge(start_edge_id, previous_node, intermediate_node, default_interval))
+            start_edge_id += 1
             previous_node = intermediate_node
 
-        edges.append(Edge(f"{previous_node.id}-{end_node.id}", previous_node, end_node, travel_time % default_interval))
+        edges.append(Edge(start_edge_id, previous_node, end_node, travel_time % default_interval))
         segments2nodes[segment].append(end_node)
 
-    return nodes, edges, segments, node2segments, segments2nodes
+    return nodes, platform_nodes, edges, segments, node2segments, segments2nodes
 
 def calc_coordinates_with_networkx(nodes, edges):
     G = nx.Graph()
@@ -82,6 +94,19 @@ def calc_coordinates_with_networkx(nodes, edges):
         nodes[node_id].y = y
 
     return nodes
+
+def build_adjacency_matrix(nodes, edges):
+    G = nx.Graph()
+
+    # Add nodes to the graph
+    for node_id, node in nodes.items():
+        G.add_node(node_id, weight=node.weight)
+
+    # Add edges to the graph
+    for edge in edges:
+        G.add_edge(edge.start_node.id, edge.end_node.id, weight=edge.weight)
+
+    return nx.adjacency_matrix(G).todense()
 
 if __name__ == "__main__":
     # Create platform objects

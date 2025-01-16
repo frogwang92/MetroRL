@@ -36,7 +36,7 @@ class SimulationState:
     mode: Mode = Mode.SELFROLLING
 
 class Clock:
-    def __init__(self, env, mode=ClockMode.INTERNAL, external_clock=None, interval=0.1):
+    def __init__(self, env, mode=ClockMode.INTERNAL, external_clock=None, interval=0.0001):
         self.env = env
         self.mode = mode
         self.external_clock = external_clock

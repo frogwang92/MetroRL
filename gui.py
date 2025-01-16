@@ -1,11 +1,6 @@
-import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QGraphicsLineItem, QGraphicsEllipseItem, QToolTip, QStatusBar, QToolBar, QListWidget, QVBoxLayout, QHBoxLayout, QWidget, QSplitter, QLabel, QTabWidget, QPlainTextEdit
+from PyQt6.QtWidgets import QMainWindow, QApplication, QGraphicsScene, QGraphicsView, QGraphicsLineItem, QGraphicsEllipseItem, QToolTip, QStatusBar, QToolBar, QListWidget, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QTabWidget, QPlainTextEdit
 from PyQt6.QtCore import Qt, QPointF, QTimer
 from PyQt6.QtGui import QPen, QColor, QIcon, QAction, QBrush, QPainter
-from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from facility.platform import Platform
-from tr.linesegment import LineSegment
-from buildtopology import build_topology, calc_coordinates_with_networkx
 from topologyutils import node_in_segment_percentage
 from linedata import platforms, line_segments, calc_platform_positions
 from logger import logger, add_logger_to_gui
@@ -497,7 +492,7 @@ class MetroWindow(QMainWindow):
         # Set up a timer to refresh trains every 500ms
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_trains)
-        self.refresh_timer.start(500)
+        self.refresh_timer.start(10)
 
     def refresh_trains(self):
         self.trainList.clear()
@@ -513,7 +508,7 @@ class MetroWindow(QMainWindow):
         for train in self.env.get_all_trains().values():
             # calculate the x 
             x = self.timeline_margin + self.env.state.time * self.timeline_tickwidth
-            # claculate the y
+            # calculate the y
             segment = self.env.node2segments[train.state.current_node.id]
             startplat = segment.start_platform
             endplat = segment.end_platform
@@ -535,6 +530,8 @@ class MetroWindow(QMainWindow):
                 10,
                 10
             )
+            # draw train id in the train item
+
             trainitem.setBrush(QBrush(QColor('red')))
             self.topology_scene.addItem(trainitem)
             self.train_items[train] = trainitem
