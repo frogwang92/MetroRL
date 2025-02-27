@@ -8,7 +8,8 @@ class MetroWorldV1:
     def __init__(
         self,
         num_envs: int,
-        device: torch.device
+        device: torch.device,
+        **kwargs
     ):
         self.num_envs = num_envs
         self.device = device
@@ -33,11 +34,11 @@ class MetroWorldV1:
         # for each env, check all the agent's potential next position
         # if there is overlap position, the potential move failed, and the agent's position remains the same
         # if there is no overlap position, the agent's position is updated to the potential next position
-        for env in self.num_envs:
+        for env in range(0,self.num_envs):
             # get all the potential next positions for all agents
             potential_next_pos = torch.zeros(len(self.agents), device=self.device)
-            for agent in self.agents:
-                potential_next_pos[agent] = agent.potential_next_pos
+            for i, agent in enumerate(self.agents):
+                potential_next_pos[i] = agent.potential_next_pos[env]
             # check if there is any other agent in the same potential next positions
             duplicate_mask = torch.zeros(len(self.agents), dtype=torch.bool, device=self.device)
             for i in range(len(self.agents)):
@@ -76,7 +77,7 @@ class MetroWorldV1:
         # Check all edges for connections to current node
         for edge in self.edges:
             # Check forward direction
-            if edge.start_node == current_node:
+            if edge.start_node.id == current_node:
                 possible_nodes.append(edge.end_node)
                 
             # Check reverse direction

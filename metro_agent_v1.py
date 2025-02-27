@@ -16,14 +16,12 @@ class Action:
 class AgentState:
     """列车状态"""
     position: torch.Tensor        # 在当前边上的位置
-    speed: torch.Tensor          # 当前速度
     current_edge: torch.Tensor   # 当前所在边的ID
     current_node: torch.Tensor   # 当前所在节点ID
     target_station: torch.Tensor # 目标站点ID
     arrival_time: torch.Tensor   # 到站时间
     schedule_time: torch.Tensor  # 计划到站时间
     passenger_count: torch.Tensor # 当前载客数
-    time: torch.Tensor           # 当前时间
     is_running: torch.Tensor      # 列车是否在运行
 
 class MetroAgentV1:
@@ -40,34 +38,31 @@ class MetroAgentV1:
         self.name = name
         self.num_envs = num_envs
         self.device = device
-        
+
+        self.action_result = None
+
         # 初始化状态
         self._init_state()
-        
-        # 动作空间
-        self.action_dim = 1 
-        self.action_result = None
-        
+
     def _init_state(self):
         """初始化智能体状态"""
         self.state = AgentState(
-            position=torch.zeros(self.num_envs, device=self.device),
-            current_edge=torch.ones(self.num_envs, device=self.device, dtype=torch.long) * -1,
-            current_node=torch.zeros(self.num_envs, device=self.device, dtype=torch.long),
-            target_station=torch.zeros(self.num_envs, device=self.device, dtype=torch.long),
-            arrival_time=torch.zeros(self.num_envs, device=self.device),
-            schedule_time=torch.zeros(self.num_envs, device=self.device),
-            passenger_count=torch.zeros(self.num_envs, device=self.device),
+            position=torch.zeros(self.num_envs, device=self.device, dtype=torch.float32),
+            current_edge=torch.ones(self.num_envs, device=self.device, dtype=torch.float32),
+            current_node=torch.zeros(self.num_envs, device=self.device, dtype=torch.float32),
+            target_station=torch.zeros(self.num_envs, device=self.device, dtype=torch.float32),
+            arrival_time=torch.zeros(self.num_envs, device=self.device, dtype=torch.float32),
+            schedule_time=torch.zeros(self.num_envs, device=self.device, dtype=torch.float32),
+            passenger_count=torch.zeros(self.num_envs, device=self.device, dtype=torch.float32),
             is_running=torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         )
 
-        self.potential_next_pos = torch.zeros(self.num_envs, device=self.device)
-        self.action_result = torch.zeros(self.num_envs, device=self.device)
+        self.potential_next_pos = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
+        self.action_result = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
         
         # 当前动作
         self.action = torch.zeros(
-            self.num_envs, 
-            self.action_dim, 
+            self.num_envs,
             device=self.device
         )
         
@@ -76,14 +71,12 @@ class MetroAgentV1:
         if env_index is not None:
             # 重置单个环境
             self.state.position[env_index] = 0
-            self.state.speed[env_index] = 0
             self.state.current_edge[env_index] = -1
             self.state.current_node[env_index] = 0
             self.state.target_station[env_index] = 0
             self.state.arrival_time[env_index] = 0
             self.state.schedule_time[env_index] = 0
             self.state.passenger_count[env_index] = 0
-            self.state.time[env_index] = 0
             self.action[env_index] = 0
         else:
             # 重置所有环境

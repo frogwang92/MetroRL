@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 import sys
 sys.path.append('..')
-from envwrapper import EnvWrapper
+from envwrapper import MetroRLEnv
 
 # Devices
 is_fork = multiprocessing.get_start_method() == "fork"
@@ -61,7 +61,7 @@ num_vmas_envs = (
 
 n_agents = 3
 
-env = EnvWrapper(
+env = MetroRLEnv(
     num_envs=num_vmas_envs,
     max_steps=max_steps,
     device=vmas_device,
@@ -94,24 +94,24 @@ share_parameters_policy = True
 
 policy_net = torch.nn.Sequential(
     MultiAgentMLP(
-        n_agent_inputs=env.observation_spec["agents", "observation"].shape[
+        n_agent_inputs=env.observation_spec["agents", "observation", "train_state"].shape[
             -1
         ],  # n_obs_per_agent
-        n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
+        n_agent_outputs=2 * 1,  # 2 * n_actions_per_agents
         n_agents=env.n_agents,
         centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
         share_params=share_parameters_policy,
         device=device,
         depth=2,
         num_cells=256,
-        activation_class=torch.nn.Tanh,
+        activation_class=torch.nn.Tanh
     ),
     NormalParamExtractor(),  # this will just separate the last dimension into two outputs: a loc and a non-negative scale
 )
 
 policy_module = TensorDictModule(
     policy_net,
-    in_keys=[("agents", "observation")],
+    in_keys=[("agents", "observation", "train_state")],
     out_keys=[("agents", "loc"), ("agents", "scale")],
 )
 
@@ -121,10 +121,10 @@ policy = ProbabilisticActor(
     in_keys=[("agents", "loc"), ("agents", "scale")],
     out_keys=[env.action_key],
     distribution_class=TanhNormal,
-    distribution_kwargs={
-        "low": env.unbatched_action_spec[env.action_key].space.low,
-        "high": env.unbatched_action_spec[env.action_key].space.high,
-    },
+    # distribution_kwargs={
+    #    "low": env.unbatched_action_spec[env.action_key].space.low,
+    #    "high": env.unbatched_action_spec[env.action_key].space.high,
+    # },
     return_log_prob=True,
     log_prob_key=("agents", "sample_log_prob"),
 )  # we'll need the log-prob for the PPO loss
@@ -132,8 +132,10 @@ policy = ProbabilisticActor(
 share_parameters_critic = True
 mappo = True  # IPPO if False
 
+print("Observation shape:", env.observation_spec["agents", "observation", "train_state"].shape)
+
 critic_net = MultiAgentMLP(
-    n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
+    n_agent_inputs=env.observation_spec["agents", "observation", "train_state"].shape[-1],
     n_agent_outputs=1,  # 1 value per agent
     n_agents=env.n_agents,
     centralised=mappo,
@@ -146,12 +148,13 @@ critic_net = MultiAgentMLP(
 
 critic = TensorDictModule(
     module=critic_net,
-    in_keys=[("agents", "observation")],
+    in_keys=[("agents", "observation", "train_state")],
     out_keys=[("agents", "state_value")],
 )
-
-print("Running policy:", policy(env.reset()))
-print("Running value:", critic(env.reset()))
+observations = env.reset()
+observations = observations.to(torch.float32)
+print("Running policy:", policy(observations))
+print("Running value:", critic(observations))
 
 collector = SyncDataCollector(
     env,

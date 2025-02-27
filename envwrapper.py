@@ -29,8 +29,8 @@ from torchrl.envs.utils import (
     MarlGroupMapType,
 )
 
-from RL.sample_mappo import device
 from metro_environment import MetroEnv
+from metro_scenario_v1 import MetroScenarioV1
 
 
 @set_gym_backend("gym")
@@ -119,18 +119,8 @@ class EnvWrapper(_EnvWrapper):
     def _build_env(
         self,
         env: MetroEnv = None,
+        **kwargs,
     ):
-        if env is not None:
-            return env
-        else:
-            env = MetroEnv(
-                num_envs=self.num_envs,
-                max_steps=self.max_steps,
-                n_agents=self.n_agents,
-                device=self.device,
-                **self.kwargs,
-            )
-
         # Adjust batch size
         if len(self.batch_size) == 0:
             # Batch size not set
@@ -257,8 +247,8 @@ class EnvWrapper(_EnvWrapper):
                 Composite(
                     {
                         "action": _vmas_to_torchrl_spec_transform(
-                            self.action_space[agent_index],
-                            categorical_action_encoding=self.categorical_actions,
+                            self.action_space[agent_name],
+                            categorical_action_encoding=True,
                             device=self.device,
                         )  # shape = (n_actions_per_agent,)
                     },
@@ -268,9 +258,9 @@ class EnvWrapper(_EnvWrapper):
                 Composite(
                     {
                         "observation": _vmas_to_torchrl_spec_transform(
-                            self.observation_space[agent_index],
+                            self.observation_space[agent_name],
                             device=self.device,
-                            categorical_action_encoding=self.categorical_actions,
+                            categorical_action_encoding=True,
                         )  # shape = (n_obs_per_agent,)
                     },
                 )
@@ -357,10 +347,8 @@ class EnvWrapper(_EnvWrapper):
         for group, agent_names in self.group_map.items():
             agent_tds = []
             for agent_name in agent_names:
-                i = self.agent_names_to_indices_map[agent_name]
-
-                agent_obs = self.read_obs(obs[i])
-                agent_info = self.read_info(infos[i])
+                agent_obs = self.read_obs(obs[agent_name])
+                agent_info = self.read_info(infos[agent_name])
                 agent_td = TensorDict(
                     source={
                         "observation": agent_obs,
@@ -391,6 +379,7 @@ class EnvWrapper(_EnvWrapper):
         agent_indices = {}
         action_list = []
         n_agents = 0
+        # print(tensordict)
         for group, agent_names in self.group_map.items():
             group_action = tensordict.get((group, "action"))
             group_action_list = list(self.read_action(group_action, group=group))
@@ -412,11 +401,9 @@ class EnvWrapper(_EnvWrapper):
         for group, agent_names in self.group_map.items():
             agent_tds = []
             for agent_name in agent_names:
-                i = self.agent_names_to_indices_map[agent_name]
-
-                agent_obs = self.read_obs(obs[i])
-                agent_rew = self.read_reward(rews[i])
-                agent_info = self.read_info(infos[i])
+                agent_obs = self.read_obs(obs[agent_name])
+                agent_rew = self.read_reward(rews[agent_name])
+                agent_info = self.read_info(infos[agent_name])
 
                 agent_td = TensorDict(
                     source={
@@ -477,8 +464,6 @@ class EnvWrapper(_EnvWrapper):
         return rewards
 
     def read_action(self, action, group: str = "agents"):
-        if not self.continuous_actions and not self.categorical_actions:
-            action = self.unbatched_action_spec[group, "action"].to_categorical(action)
         agent_actions = action.unbind(dim=1)
         return agent_actions
 
@@ -491,3 +476,49 @@ class EnvWrapper(_EnvWrapper):
     def to(self, device: DEVICE_TYPING) -> EnvBase:
         self._env.to(device)
         return super().to(device)
+
+
+class MetroRLEnv(EnvWrapper):
+    def __init__(
+        self,
+        *,
+        num_envs: int,
+        max_steps: Optional[int] = None,
+        seed: Optional[int] = None,
+        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        **kwargs,
+    ):
+        super().__init__(
+            num_envs=num_envs,
+            max_steps=max_steps,
+            seed=seed,
+            group_map=group_map,
+            **kwargs,
+        )
+
+    def _check_kwargs(self, kwargs: Dict):
+        if "num_envs" not in kwargs:
+            raise TypeError("Could not find environment key 'num_envs' in kwargs.")
+
+    def _build_env(
+        self,
+        num_envs: int,
+        max_steps: Optional[int],
+        seed: Optional[int],
+        **scenario_kwargs,
+    ) -> MetroEnv:
+
+        # build metro scenario here
+        self.scenario = MetroScenarioV1(**scenario_kwargs)
+
+        return super()._build_env(
+            env=MetroEnv(
+                scenario=self.scenario,
+                num_envs=num_envs,
+                max_steps=max_steps,
+                seed=seed,
+            )
+        )
+
+    def __repr__(self):
+        return f"{super().__repr__()} (scenario={self.scenario_name})"

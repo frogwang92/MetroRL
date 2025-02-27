@@ -12,6 +12,8 @@ import torch
 
 from gym import spaces
 from torch import Tensor
+
+from metro_scenario_v1 import MetroScenarioV1
 from torchutils import TorchUtils, override
 
 from metro_agent_v1 import MetroAgentV1
@@ -58,6 +60,7 @@ class TorchVectorizedObject(object):
 class MetroEnv(TorchVectorizedObject):
     def __init__(
         self,
+        scenario: MetroScenarioV1,
         num_envs: int = 32,
         device = "cpu",
         max_steps: Optional[int] = None,
@@ -68,6 +71,7 @@ class MetroEnv(TorchVectorizedObject):
     ):
         self.num_envs = num_envs
         TorchVectorizedObject.__init__(self, num_envs, torch.device(device))
+        self.scenario = scenario
         self.world = self.scenario.env_make_world(self.num_envs, self.device, **kwargs)
 
         self.agents = self.world.agents
@@ -143,12 +147,10 @@ class MetroEnv(TorchVectorizedObject):
         get_rewards: bool,
         get_infos: bool,
         get_dones: bool,
-        dict_agent_names: Optional[bool] = None,
+        dict_agent_names: Optional[bool] = True,
     ):
         if not get_infos and not get_dones and not get_rewards and not get_observations:
             return
-        if dict_agent_names is None:
-            dict_agent_names = self.dict_spaces
 
         obs = rewards = infos = terminated = truncated = dones = None
 
@@ -196,7 +198,7 @@ class MetroEnv(TorchVectorizedObject):
     
     def seed(self, seed=None):
         if seed is None:
-            seed = 0
+            seed = 42
         torch.manual_seed(seed)
         np.random.seed(seed)
         random.seed(seed)
@@ -214,21 +216,6 @@ class MetroEnv(TorchVectorizedObject):
             dones: Tensor of len 'self.num_envs' of which each element is a bool
             infos : List on len 'self.n_agents' of which each element is a dictionary for which each key is a metric
                     and the value is a tensor of shape '(self.num_envs, metric_size_per_agent)'
-
-        Examples:
-            >>> import vmas
-            >>> env = vmas.make_env(
-            ...     scenario="waterfall",  # can be scenario name or BaseScenario class
-            ...     num_envs=32,
-            ...     device="cpu",  # Or "cuda" for GPU
-            ...     continuous_actions=True,
-            ...     max_steps=None,  # Defines the horizon. None is infinite horizon.
-            ...     seed=None,  # Seed of the environment
-            ...     n_agents=3,  # Additional arguments you want to pass to the scenario
-            ... )
-            >>> obs = env.reset()
-            >>> for _ in range(10):
-            ...     obs, rews, dones, info = env.step(env.get_random_actions())
         """
         if isinstance(actions, Dict):
             actions_dict = actions
@@ -302,43 +289,46 @@ class MetroEnv(TorchVectorizedObject):
         
     def get_action_space(self):
         return spaces.Dict(
-                {
-                    agent.name: self.get_agent_action_space(agent)
-                    for agent in self.agents
-                }
-            )
+            {
+                agent.name: self.get_agent_action_space(agent)
+                for agent in self.agents
+            }
+        )
 
     def get_observation_space(self, observations: Union[List, Dict]):
         return spaces.Dict(
-                {
-                    agent.name: self.get_agent_observation_space(
-                        agent, observations[agent.name]
-                    )
-                    for agent in self.agents
-                }
-            )
+            {
+                agent.name: self.get_agent_observation_space(
+                    agent, observations[agent.name]
+                )
+                for agent in self.agents
+            }
+        )
 
     def get_agent_action_size(self, agent: MetroAgentV1):
-        if self.continuous_actions:
-            return agent.action.action_size + (
-                self.world.dim_c if not agent.silent else 0
-            )
-        elif self.multidiscrete_actions:
-            return agent.action_size + (
-                1 if not agent.silent and self.world.dim_c != 0 else 0
-            )
-        else:
-            return 1
+        return 1
 
     def get_agent_action_space(self, agent: MetroAgentV1):
         return spaces.Discrete(2)
 
-    def get_agent_observation_space(self, agent: MetroAgentV1):
-        return spaces.Dict(
+    def get_agent_observation_space(self, agent: MetroAgentV1, obs):
+        if isinstance(obs, Tensor):
+            return spaces.Box(
+                low=0,
+                high=10000,
+                shape=obs.shape[1:],
+                dtype=np.float32
+            )
+        elif isinstance(obs, Dict):
+            return spaces.Dict(
                 {
                     key: self.get_agent_observation_space(agent, value)
                     for key, value in obs.items()
                 }
+            )
+        else:
+            raise NotImplementedError(
+                f"Invalid type of observation {obs} for agent {agent.name}"
             )
 
     def get_random_action(self, agent: MetroAgentV1) -> torch.Tensor:
@@ -355,7 +345,7 @@ class MetroEnv(TorchVectorizedObject):
         action = torch.randint(
                     low=0,
                     high=action_space.n,
-                    size=(agent.batch_dim,),
+                    size=(1,),
                     device=agent.device,
                 )
         
@@ -366,22 +356,6 @@ class MetroEnv(TorchVectorizedObject):
 
         Returns:
             Sequence[torch.tensor]: the random actions for the agents
-
-        Examples:
-            >>> import vmas
-            >>> env = vmas.make_env(
-            ...     scenario="waterfall",  # can be scenario name or BaseScenario class
-            ...     num_envs=32,
-            ...     device="cpu",  # Or "cuda" for GPU
-            ...     continuous_actions=True,
-            ...     max_steps=None,  # Defines the horizon. None is infinite horizon.
-            ...     seed=None,  # Seed of the environment
-            ...     n_agents=3,  # Additional arguments you want to pass to the scenario
-            ... )
-            >>> obs = env.reset()
-            >>> for _ in range(10):
-            ...     obs, rews, dones, info = env.step(env.get_random_actions())
-
         """
         return [self.get_random_action(agent) for agent in self.agents]
 
@@ -400,11 +374,10 @@ class MetroEnv(TorchVectorizedObject):
         assert not action.isnan().any()
         agent.action.u = torch.zeros(
             self.batch_dim,
-            agent.action_size,
-            device=self.device,
-            dtype=torch.float32,
+            device=self.device
         )
-
+        if action.shape[1] == 3:
+            print(action)
         assert action.shape[1] == self.get_agent_action_size(agent), (
             f"Agent {agent.name} has wrong action size, got {action.shape[1]}, "
             f"expected {self.get_agent_action_size(agent)}"
@@ -415,5 +388,4 @@ class MetroEnv(TorchVectorizedObject):
     @override(TorchVectorizedObject)
     def to(self, device: DEVICE_TYPING):
         device = torch.device(device)
-        self.scenario.to(device)
         super().to(device)

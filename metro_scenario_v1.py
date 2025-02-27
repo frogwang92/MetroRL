@@ -4,45 +4,44 @@ from metro_world import MetroWorldV1
 from metro_agent_v1 import MetroAgentV1
 
 class MetroScenarioV1:
-    """地铁系统场景类,负责管理环境状态和交互规则"""
+    """Metro system scenario class, responsible for managing environment states and interaction rules"""
     
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.world = None
+        self.n_agents = kwargs["n_agents"]
         self._init_scenario()
 
     def _init_scenario(self):
-        # 初始化状态追踪器
-        self.passenger_count = {}  # 各站点等待乘客
-        self.congestion = {}      # 拥挤度
-        self.delays = {}          # 延误情况
+        # Initialize state trackers
+        self.passenger_count = {}  # Waiting passengers at each station
+        self.congestion = {}      # Congestion levels
+        self.delays = {}          # Delay situations
 
     def env_make_world(self, num_envs: int, device: torch.device, **kwargs):
-        """创建向量化的世界状态"""
+        """Create vectorized world states"""
         self.num_envs = num_envs
         self.device = device
         
-        # 初始化世界状态
+        # Initialize world state
         self.world = MetroWorldV1(
-            num_envs=num_envs,
-            device=device,
+            num_envs=self.num_envs,
+            device=self.device,
             **kwargs
         )
-        
-        if kwargs.get("num_trains"):
-            self.num_trains = kwargs["num_trains"]
-            for i in range(kwargs["num_trains"]):
-                agent = MetroAgentV1(
-                    f"train_{i}",
-                    num_envs,
-                    device
-                )
-                agent.init_random_position(len(self.world.platfrom_nodes))
-                self.world.agents.append(agent)
+
+        for i in range(self.n_agents):
+            agent = MetroAgentV1(
+                f"agent_{i}",
+                num_envs,
+                device
+            )
+            agent.init_random_position(len(self.world.platfrom_nodes))
+            self.world.agents.append(agent)
 
         return self.world
 
     def env_reset_world_at(self, env_index=None):
-        # 重置列车位置
+        # Reset train positions
         for agent in self.world.agents:
             agent.reset_state(env_index)
             agent.init_random_position(len(self.world.platfrom_nodes), env_index)
@@ -50,36 +49,42 @@ class MetroScenarioV1:
     def pre_step(self):
         potential_next_pos = torch.zeros(self.num_envs, device=self.device)
         for agent in self.world.agents:
-            for env in self.num_envs:
-                if agent.action[env] == 1:
-                    current_pos = agent.state.position[env]
-                    potential_next_pos[env] = self.world.get_next_nodes(current_pos)[0]
+            for env in range(self.num_envs):
+                if agent.action[env].item() == 1:
+                    current_pos = agent.state.position[env].item()
+                    potential_next_pos[env] = self.world.get_next_nodes(current_pos)[0].id
                 else:
-                    potential_next_pos[env] = agent.state.position[env]
+                    potential_next_pos[env] = agent.state.position[env].item()
             agent.potential_step(potential_next_pos)
 
     def post_step(self):
         pass
 
-    def observation(self, agent) -> Dict[str, torch.Tensor]:
-        """生成智能体的观测"""
+    def env_process_action(self, agent: MetroAgentV1):
+        pass
+
+    def observation(self, agent: MetroAgentV1) -> Dict[str, torch.Tensor]:
+        """Generate agent observations"""
+        state = torch.stack([
+                agent.state.position,
+                agent.state.is_running
+            ], dim=-1)
+        state = state.to(torch.float32)
         return {
-            # 列车状态
-            "train_state": torch.stack([
-                agent.state.position
-            ], dim=-1),
+            # Train state
+            "train_state": state,
             
-            # 全局状态
+            # Global state
             # "global_state": torch.stack([
             #     self.world.adjacency_matrix
             # ], dim=-1)
 
-            # Agent‘s Future
+            # Agent's Future
             
         }
 
     def reward(self, agent) -> torch.Tensor:
-        """计算智能体的奖励"""
+        """Calculate agent rewards"""
         reward = torch.zeros(self.num_envs, device=self.device)
         
         move_reward = agent.action_result - 1
@@ -88,7 +93,7 @@ class MetroScenarioV1:
         return reward
 
     def done(self) -> torch.Tensor:
-        """判断场景是否结束"""
+        """Determine if scenario is finished"""
         return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
     def info(self, agent) -> Dict[str, torch.Tensor]:
