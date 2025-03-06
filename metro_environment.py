@@ -2,7 +2,6 @@
 Environment module for managing the metro system simulation as a TorchRL environment.
 """
 
-import math
 import random
 from ctypes import byref
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
@@ -12,11 +11,11 @@ import torch
 
 from gym import spaces
 from torch import Tensor
-
-from metro_scenario_v1 import MetroScenarioV1
 from torchutils import TorchUtils, override
 
+from metro_scenario_v1 import MetroScenarioV1
 from metro_agent_v1 import MetroAgentV1
+from gui_lean import MetroWindow, QApplication
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
@@ -263,6 +262,10 @@ class MetroEnv(TorchVectorizedObject):
 
         self.steps += 1
 
+        # Update rendering if active
+        if self.viewer is not None:
+            self.update_render()
+
         return self.get_from_scenario(
             get_observations=True,
             get_infos=True,
@@ -376,8 +379,6 @@ class MetroEnv(TorchVectorizedObject):
             self.batch_dim,
             device=self.device
         )
-        if action.shape[1] == 3:
-            print(action)
         assert action.shape[1] == self.get_agent_action_size(agent), (
             f"Agent {agent.name} has wrong action size, got {action.shape[1]}, "
             f"expected {self.get_agent_action_size(agent)}"
@@ -385,7 +386,153 @@ class MetroEnv(TorchVectorizedObject):
         
         agent.set_action(action)
 
+    def render(self, mode="human"):
+        """
+        Render the environment using PyQt.
+        
+        This method creates a QApplication and MetroWindow if they don't exist,
+        processes Qt events to update the UI, and keeps the visualization responsive.
+        
+        Args:
+            mode (str): The rendering mode (currently only "human" is supported)
+            
+        Returns:
+            bool: True if rendering was successful
+        """
+        # By default, render environment at index 0
+        return self.render_env(env_index=0, mode=mode)
+        
+    def render_env(self, env_index=0, mode="human"):
+        """
+        Render a specific environment instance from the vectorized batch.
+        
+        Args:
+            env_index (int): The index of the environment to render
+            mode (str): The rendering mode (currently only "human" is supported)
+            
+        Returns:
+            bool: True if rendering was successful
+        """
+        # Validate env_index
+        self._check_batch_index(env_index)
+        
+        # Initialize the application if it doesn't exist yet
+        if not QApplication.instance():
+            self._app = QApplication([])
+        
+        # Initialize the viewers dictionary if it doesn't exist yet
+        if not hasattr(self, "viewers"):
+            self.viewers = {}
+        
+        # Use the correct viewer identifier
+        viewer_id = f"env_{env_index}"
+        
+        # Initialize the viewer if it doesn't exist yet
+        if viewer_id not in self.viewers:
+            self.viewers[viewer_id] = MetroWindow(self, env_index=env_index)
+            self.viewers[viewer_id].show()
+            
+            # For backward compatibility, also set self.viewer to the first created viewer
+            if self.viewer is None:
+                self.viewer = self.viewers[viewer_id]
+        
+        # Process any pending Qt events to keep the UI responsive
+        self.update_render(env_index)
+        
+        # For headless environments or testing
+        if mode == "rgb_array":
+            # Not implemented yet, would return an image of the scene
+            return None
+        
+        return True
+
+    def update_render(self, env_index=None):
+        """
+        Update the rendered visualization without creating a new window.
+        This is useful when calling step() multiple times and wanting to see updates.
+        
+        Args:
+            env_index (int, optional): Index of the environment to update. 
+                                      If None, updates all open viewers.
+        """
+        # Process events to redraw all viewers
+        if hasattr(self, "viewers") and self.viewers:
+            if env_index is not None:
+                # Update specific viewer
+                viewer_id = f"env_{env_index}"
+                if viewer_id in self.viewers:
+                    QApplication.processEvents()
+            else:
+                # Update all viewers
+                QApplication.processEvents()
+                
+    def close_render(self, env_index=None):
+        """
+        Close one or all rendering windows.
+        
+        Args:
+            env_index (int, optional): Index of the environment window to close.
+                                      If None, closes all windows.
+        """
+        if not hasattr(self, "viewers") or not self.viewers:
+            return
+            
+        if env_index is not None:
+            # Close specific viewer
+            viewer_id = f"env_{env_index}"
+            if viewer_id in self.viewers:
+                self.viewers[viewer_id].close()
+                if self.viewer == self.viewers[viewer_id]:
+                    self.viewer = None
+                del self.viewers[viewer_id]
+        else:
+            # Close all viewers
+            for viewer in list(self.viewers.values()):
+                viewer.close()
+            self.viewers.clear()
+            self.viewer = None
+
+    def get_all_trains(self) -> List[MetroAgentV1]: 
+        """
+        Get all trains in the environment - required by the GUI renderer
+        
+        Returns:
+            dict: Dictionary of all agents as train-like objects
+        """
+        return self.agents
+
+    @property
+    def state(self):
+        """
+        Return a state-like object - required by the GUI renderer
+        
+        Returns:
+            Object with time and is_running properties
+        """
+        class EnvState:
+            def __init__(self, env):
+                self.time = int(env.steps[0].item())
+                self.is_running = True
+        
+        return EnvState(self)
+
     @override(TorchVectorizedObject)
     def to(self, device: DEVICE_TYPING):
         device = torch.device(device)
         super().to(device)
+
+    @property
+    def nodes(self):
+        return self.world.nodes
+    
+    @property
+    def edges(self):
+        return self.world.edges
+    
+    @property
+    def node2segments(self):
+        return self.world.node2segments
+
+    @property
+    def segment2nodes(self):
+        return self.world.segment2nodes

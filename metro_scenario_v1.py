@@ -35,8 +35,9 @@ class MetroScenarioV1:
                 num_envs,
                 device
             )
-            agent.init_random_position(len(self.world.platfrom_nodes))
+            # agent.init_random_position(len(self.world.platfrom_nodes))
             self.world.agents.append(agent)
+        self.env_reset_world_at()
 
         return self.world
 
@@ -44,7 +45,18 @@ class MetroScenarioV1:
         # Reset train positions
         for agent in self.world.agents:
             agent.reset_state(env_index)
-            agent.init_random_position(len(self.world.platfrom_nodes), env_index)
+            # agent.init_random_position(len(self.world.platfrom_nodes), env_index)
+
+        import random
+        if env_index is None:
+            for env in range(self.num_envs):
+                random_positions = random.sample(list(self.world.platfrom_nodes.keys()), self.n_agents)
+                for i, agent in enumerate(self.world.agents):
+                    agent.state.position[env] = random_positions[i]
+        else:
+            random_positions = random.sample(list(self.world.platfrom_nodes.keys()), self.n_agents)
+            for i, agent in enumerate(self.world.agents):
+                agent.state.position[env_index] = random_positions[i]
 
     def pre_step(self):
         potential_next_pos = torch.zeros(self.num_envs, device=self.device)
@@ -55,7 +67,7 @@ class MetroScenarioV1:
                     potential_next_pos[env] = self.world.get_next_nodes(current_pos)[0].id
                 else:
                     potential_next_pos[env] = agent.state.position[env].item()
-            agent.potential_step(potential_next_pos)
+            agent.potential_step(potential_next_pos.clone())
 
     def post_step(self):
         pass
@@ -86,9 +98,7 @@ class MetroScenarioV1:
     def reward(self, agent) -> torch.Tensor:
         """Calculate agent rewards"""
         reward = torch.zeros(self.num_envs, device=self.device)
-        
         move_reward = agent.action_result - 1
-
         reward += move_reward
         return reward
 

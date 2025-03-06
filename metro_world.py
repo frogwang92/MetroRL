@@ -43,14 +43,21 @@ class MetroWorldV1:
             duplicate_mask = torch.zeros(len(self.agents), dtype=torch.bool, device=self.device)
             for i in range(len(self.agents)):
                 for j in range(i + 1, len(self.agents)):
-                    if potential_next_pos[i] == potential_next_pos[j] and i != j:
+                    if potential_next_pos[i].item() == potential_next_pos[j].item() and i != j:
                         duplicate_mask[i] = True
                         duplicate_mask[j] = True
 
             for i, agent in enumerate(self.agents):
                 if not duplicate_mask[i]:
-                    agent.position = potential_next_pos[i]
-                    agent.action_result[env] = 1
+                    previous_pos = agent.state.position[env].item()
+                    new_pos = potential_next_pos[i].item()
+                    agent.state.position[env] = new_pos
+                    # if env == 0 and i == 0:
+                    #     print(f"Agent {agent.name} moved to {agent.state.position[env]}")
+                    if previous_pos != new_pos:
+                        agent.action_result[env] = 2
+                    else:
+                        agent.action_result[env] = 1
                 else:
                     agent.action_result[env] = 0
 

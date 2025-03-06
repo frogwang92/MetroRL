@@ -54,12 +54,12 @@ gamma = 0.99  # discount factor
 lmbda = 0.9  # lambda for generalised advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
-max_steps = 100  # Episode steps before done
+max_steps = 3000  # Episode steps before done
 num_vmas_envs = (
     frames_per_batch // max_steps
 )  # Number of vectorized envs. frames_per_batch should be divisible by this number
 
-n_agents = 3
+n_agents = 12
 
 env = MetroRLEnv(
     num_envs=num_vmas_envs,
@@ -97,7 +97,7 @@ policy_net = torch.nn.Sequential(
         n_agent_inputs=env.observation_spec["agents", "observation", "train_state"].shape[
             -1
         ],  # n_obs_per_agent
-        n_agent_outputs=2 * 1,  # 2 * n_actions_per_agents
+        n_agent_outputs=2,  # 2 classes (0 and 1)
         n_agents=env.n_agents,
         centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
         share_params=share_parameters_policy,
@@ -106,25 +106,21 @@ policy_net = torch.nn.Sequential(
         num_cells=256,
         activation_class=torch.nn.Tanh
     ),
-    NormalParamExtractor(),  # this will just separate the last dimension into two outputs: a loc and a non-negative scale
+    torch.nn.LogSoftmax(dim=-1),  # Convert outputs to log probabilities
 )
 
 policy_module = TensorDictModule(
     policy_net,
     in_keys=[("agents", "observation", "train_state")],
-    out_keys=[("agents", "loc"), ("agents", "scale")],
+    out_keys=[("agents", "logits")],
 )
 
 policy = ProbabilisticActor(
     module=policy_module,
     spec=env.unbatched_action_spec,
-    in_keys=[("agents", "loc"), ("agents", "scale")],
+    in_keys=[("agents", "logits")],
     out_keys=[env.action_key],
-    distribution_class=TanhNormal,
-    # distribution_kwargs={
-    #    "low": env.unbatched_action_spec[env.action_key].space.low,
-    #    "high": env.unbatched_action_spec[env.action_key].space.high,
-    # },
+    distribution_class=torch.distributions.Categorical,
     return_log_prob=True,
     log_prob_key=("agents", "sample_log_prob"),
 )  # we'll need the log-prob for the PPO loss
