@@ -15,6 +15,8 @@ class Node:
     def __init__(self, id, weight):
         self.id = id
         self.weight = weight
+        self.bfs_tree = None
+        self.type : int = 1   # 0: platform, 1: segment 
 
     def __repr__(self):
         return f"Node(id={self.id}, weight={self.weight})"

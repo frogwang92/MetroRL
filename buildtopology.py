@@ -1,3 +1,5 @@
+import random
+
 import networkx as nx
 """
 This module builds a topology of nodes and edges from given platforms and line segments,
@@ -37,7 +39,13 @@ def build_topology(platforms, line_segments, default_interval=1):
     # Convert platforms to nodes
     for platform in platforms:
         nodes[platform.id] = Node(platform.id, platform.dwell)
+        nodes[platform.id].type = 0
         platform_nodes[platform.id] = nodes[platform.id]
+
+    # set random travel time for each segments
+    for segment in line_segments:
+        random_travel_time = random.randint(60, 180)
+        segment.set_travel_time(random_travel_time)
 
     # Convert line segments to nodes and edges
     start_node_id = INTERMEDIATE_NODE_START
@@ -88,12 +96,21 @@ def calc_coordinates_with_networkx(nodes, edges):
     # Calculate the coordinates using networkx layout
     pos = nx.spring_layout(G, scale=2)
 
+    # calculate the bfs sub tree
+    for node_id, node in nodes.items():
+        T = nx.bfs_tree(G, source=node_id, depth_limit=500)
+        node.bfs_tree = bfs_tree_to_list(T)
+        # print (f"Node {node_id} has {len(T)} nodes in its BFS tree")
+
     # Update node coordinates
     for node_id, (x, y) in pos.items():
         nodes[node_id].x = x
         nodes[node_id].y = y
 
     return nodes
+
+def bfs_tree_to_list(T):
+    return list(T.nodes())[0:500]
 
 def build_adjacency_matrix(nodes, edges):
     G = nx.Graph()

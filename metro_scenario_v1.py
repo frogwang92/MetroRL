@@ -1,4 +1,5 @@
 from typing import Dict
+from networkx import bfs_tree
 import torch
 from metro_world import MetroWorldV1
 from metro_agent_v1 import MetroAgentV1
@@ -35,6 +36,7 @@ class MetroScenarioV1:
                 num_envs,
                 device
             )
+            agent.world = self.world
             # agent.init_random_position(len(self.world.platfrom_nodes))
             self.world.agents.append(agent)
         self.env_reset_world_at()
@@ -42,6 +44,8 @@ class MetroScenarioV1:
         return self.world
 
     def env_reset_world_at(self, env_index=None):
+        # init random weights
+        self.world.init_random_weights()
         # Reset train positions
         for agent in self.world.agents:
             agent.reset_state(env_index)
@@ -49,14 +53,20 @@ class MetroScenarioV1:
 
         import random
         if env_index is None:
+            random_positions = []
             for env in range(self.num_envs):
-                random_positions = random.sample(list(self.world.platfrom_nodes.keys()), self.n_agents)
-                for i, agent in enumerate(self.world.agents):
-                    agent.state.position[env] = random_positions[i]
-        else:
-            random_positions = random.sample(list(self.world.platfrom_nodes.keys()), self.n_agents)
+                random_positions.append(random.sample(list(self.world.platfrom_nodes.keys()), self.n_agents))
+
             for i, agent in enumerate(self.world.agents):
-                agent.state.position[env_index] = random_positions[i]
+                t = torch.zeros(self.num_envs, device=self.device)
+                for env in range(self.num_envs):
+                    t[env] = random_positions[env][i]
+                agent.init_position(t)
+        else:
+            pass
+            # random_positions = random.sample(list(self.world.platfrom_nodes.keys()), self.n_agents)
+            # for i, agent in enumerate(self.world.agents):
+            #     agent.state.position[env_index] = random_positions[i]
 
     def pre_step(self):
         potential_next_pos = torch.zeros(self.num_envs, device=self.device)
@@ -79,12 +89,19 @@ class MetroScenarioV1:
         """Generate agent observations"""
         state = torch.stack([
                 agent.state.position,
-                agent.state.is_running
+                agent.state.is_running,
+                agent.state.dwell_time,
+                agent.state.current_expected_dwell_time,
             ], dim=-1)
         state = state.to(torch.float32)
+        bfs_tree = torch.zeros(self.num_envs, 500, device=self.device)
+        for i in range(self.num_envs):
+            t = self.world.get_node(agent.state.position[i].item()).bfs_tree
+            bfs_tree[i] = torch.tensor(t, device=self.device)
         return {
             # Train state
             "train_state": state,
+            "train_bfs_tree": bfs_tree,
             
             # Global state
             # "global_state": torch.stack([
@@ -97,10 +114,7 @@ class MetroScenarioV1:
 
     def reward(self, agent) -> torch.Tensor:
         """Calculate agent rewards"""
-        reward = torch.zeros(self.num_envs, device=self.device)
-        move_reward = agent.action_result - 1
-        reward += move_reward
-        return reward
+        return agent.calc_reward()
 
     def done(self) -> torch.Tensor:
         """Determine if scenario is finished"""

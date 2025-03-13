@@ -1,3 +1,4 @@
+import random
 import torch
 from linedata import platforms, line_segments
 from buildtopology import build_topology, calc_coordinates_with_networkx, build_adjacency_matrix
@@ -34,6 +35,8 @@ class MetroWorldV1:
         # for each env, check all the agent's potential next position
         # if there is overlap position, the potential move failed, and the agent's position remains the same
         # if there is no overlap position, the agent's position is updated to the potential next position
+        duplicate_masks = []
+        new_positions = []
         for env in range(0,self.num_envs):
             # get all the potential next positions for all agents
             potential_next_pos = torch.zeros(len(self.agents), device=self.device)
@@ -46,12 +49,12 @@ class MetroWorldV1:
                     if potential_next_pos[i].item() == potential_next_pos[j].item() and i != j:
                         duplicate_mask[i] = True
                         duplicate_mask[j] = True
-
+            new_position = torch.zeros(len(self.agents), device=self.device)
             for i, agent in enumerate(self.agents):
-                if not duplicate_mask[i]:
+                if not duplicate_mask[i].item():
                     previous_pos = agent.state.position[env].item()
                     new_pos = potential_next_pos[i].item()
-                    agent.state.position[env] = new_pos
+                    new_position[i] = new_pos
                     # if env == 0 and i == 0:
                     #     print(f"Agent {agent.name} moved to {agent.state.position[env]}")
                     if previous_pos != new_pos:
@@ -59,15 +62,36 @@ class MetroWorldV1:
                     else:
                         agent.action_result[env] = 1
                 else:
+                    previous_pos = agent.state.position[env].item()
+                    new_position[i] = previous_pos
                     agent.action_result[env] = 0
+            duplicate_masks.append(duplicate_mask)
+            new_positions.append(new_position)
+
+        # transform the duplicate masks
+        for i, agent in enumerate(self.agents):
+            duplicate_mask = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+            new_position = torch.zeros(self.num_envs, device=self.device)
+            for env in range(self.num_envs):
+                duplicate_mask[env] = duplicate_masks[env][i]
+                new_position[env] = new_positions[env][i]
+
+            agent.set_position(new_position, duplicate_mask.to(agent.device))
+
 
     def to(self, device: torch.device):
         self.device = device
-        self.edge_lengths = self.edge_lengths.to(device)
-        self.edge_slopes = self.edge_slopes.to(device)
-        
         for agent in self.agents:
             agent.to(device)
+
+    def get_node(self, node_id):
+        return self.nodes[node_id]
+
+    def init_random_weights(self):
+        for node in self.nodes.values():
+            # generate random weights for each node
+            # a int value between 1 and 10
+            node.weight = random.randint(30, 60)
 
     def get_next_nodes(self, current_node):
         """
