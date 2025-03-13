@@ -102,7 +102,7 @@ policy_net = torch.nn.Sequential(
         centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
         share_params=share_parameters_policy,
         device=device,
-        depth=2,
+        depth=6,
         num_cells=256,
         activation_class=torch.nn.Tanh
     ),
@@ -137,7 +137,7 @@ critic_net = MultiAgentMLP(
     centralised=mappo,
     share_params=share_parameters_critic,
     device=device,
-    depth=2,
+    depth=6,
     num_cells=256,
     activation_class=torch.nn.Tanh,
 )
