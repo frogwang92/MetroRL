@@ -15,7 +15,12 @@ class Node:
     def __init__(self, id, weight):
         self.id = id
         self.weight = weight
+        self.weight_upper_bound = weight
+        if self.weight > 1:
+            self.weight_upper_bound = self.weight + 10
         self.bfs_tree = None
+        self.bfs_tree_weight = None
+        self.bfs_tree_weight_upper_bound = None
         self.type : int = 1   # 0: platform, 1: segment 
 
     def __repr__(self):

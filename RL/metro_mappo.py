@@ -39,12 +39,12 @@ vmas_device = device  # The device where the simulator is run (VMAS can run on G
 
 # Sampling
 frames_per_batch = 6_000  # Number of team frames collected per training iteration
-n_iters = 1000  # Number of sampling and training iterations
+n_iters = 20  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
 # Training
 num_epochs = 30  # Number of optimization steps per training iteration
-minibatch_size = 400  # Size of the mini-batches in each optimization step
+minibatch_size = 300  # Size of the mini-batches in each optimization step
 lr = 3e-4  # Learning rate
 max_grad_norm = 1.0  # Maximum norm for the gradients
 
@@ -54,7 +54,7 @@ gamma = 0.99  # discount factor
 lmbda = 0.9  # lambda for generalised advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
-max_steps = 3000  # Episode steps before done
+max_steps = 6000  # Episode steps before done
 num_vmas_envs = (
     frames_per_batch // max_steps
 )  # Number of vectorized envs. frames_per_batch should be divisible by this number
@@ -103,7 +103,7 @@ policy_net = torch.nn.Sequential(
         share_params=share_parameters_policy,
         device=device,
         depth=6,
-        num_cells=256,
+        num_cells=64,
         activation_class=torch.nn.Tanh
     ),
     torch.nn.LogSoftmax(dim=-1),  # Convert outputs to log probabilities

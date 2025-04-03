@@ -108,11 +108,11 @@ class MetroAgentV1:
         self.action = action.clamp(0, 1)
 
     def set_position(self, position: torch.Tensor, isduplicate: torch.Tensor):
-        """Set agent position"""
-        self.state.position = position
         for i in range(self.num_envs):
-            if isduplicate[i].item():  # stay in the same position
+            if position[i].item() == self.state.position[i].item():  # stay in the same position
                 self.state.dwell_time[i] = 1 + self.state.dwell_time[i].item()
+                # print(f"Agent {self.name} stayed at {position[i].item()}")
+                # print("dwell time updated: ", self.state.dwell_time[i].item())
             else:               # move to the next position
                 pos = self.world.get_node(position[i].item())
                 
@@ -121,6 +121,11 @@ class MetroAgentV1:
 
                 self.state.dwell_time[i] = 1
                 self.state.current_expected_dwell_time[i] = pos.weight
+                # print(f"Agent {self.name} moved to {position[i].item()}")
+                # print("dwell time updated: ", self.state.dwell_time[i].item())
+
+        """Set agent position"""
+        self.state.position = position
 
 
     def calc_reward(self):
@@ -128,10 +133,23 @@ class MetroAgentV1:
         # Reward for reaching the target station
         reward = torch.zeros(self.num_envs, device=self.device)
         for i in range(self.num_envs):
-            if self.state.previous_dwell_time[i].item() == 0:
-                reward[i] = 0
-            else:
-                reward[i] = (-1) * math.fabs(self.state.previous_expected_dwell_time[i] - self.state.previous_dwell_time[i])
+            # if self.state.previous_dwell_time[i].item() == 0:   # this is for the initial state
+            #     reward[i] = 0
+            # else:
+                if self.action[i].item() == 0:
+                    if self.state.dwell_time[i].item() < self.state.current_expected_dwell_time[i].item():
+                        reward[i] = 1
+                    else:
+                        reward[i] = -1
+                    # reward[i] = 0
+                else:
+                    if self.state.previous_dwell_time[i].item() < self.state.previous_expected_dwell_time[i].item():
+                        reward[i] = self.state.previous_dwell_time[i].item() - self.state.previous_expected_dwell_time[i].item()
+                    else:
+                        reward[i] = 0
+                        # reward[i] = self.state.previous_expected_dwell_time[i].item() - self.state.previous_dwell_time[i].item()
+                    reward[i] = reward[i] + 1   # reward for moving to the next position
+                    # reward[i] = 0
         return reward
 
     def to(self, device: torch.device):

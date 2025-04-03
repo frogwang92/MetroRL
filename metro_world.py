@@ -55,7 +55,7 @@ class MetroWorldV1:
                     previous_pos = agent.state.position[env].item()
                     new_pos = potential_next_pos[i].item()
                     new_position[i] = new_pos
-                    # if env == 0 and i == 0:
+                    # if env == 0 or i == 0:
                     #     print(f"Agent {agent.name} moved to {agent.state.position[env]}")
                     if previous_pos != new_pos:
                         agent.action_result[env] = 2
@@ -88,7 +88,7 @@ class MetroWorldV1:
         return self.nodes[node_id]
 
     def init_random_weights(self):
-        for node in self.nodes.values():
+        for node in self.platfrom_nodes.values():
             # generate random weights for each node
             # a int value between 1 and 10
             node.weight = random.randint(30, 60)

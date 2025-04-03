@@ -100,6 +100,13 @@ def calc_coordinates_with_networkx(nodes, edges):
     for node_id, node in nodes.items():
         T = nx.bfs_tree(G, source=node_id, depth_limit=500)
         node.bfs_tree = bfs_tree_to_list(T)
+        bfs_tree_weight = []
+        bfs_tree_weight_upper_bound = []
+        for nodeid in node.bfs_tree:
+            bfs_tree_weight.append(nodes[nodeid].weight)
+            bfs_tree_weight_upper_bound.append(nodes[nodeid].weight_upper_bound)
+        node.bfs_tree_weight = bfs_tree_weight
+        node.bfs_tree_weight_upper_bound = bfs_tree_weight_upper_bound
         # print (f"Node {node_id} has {len(T)} nodes in its BFS tree")
 
     # Update node coordinates
@@ -110,7 +117,7 @@ def calc_coordinates_with_networkx(nodes, edges):
     return nodes
 
 def bfs_tree_to_list(T):
-    return list(T.nodes())[0:500]
+    return list(T.nodes())[0:100]
 
 def build_adjacency_matrix(nodes, edges):
     G = nx.Graph()
